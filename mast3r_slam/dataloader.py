@@ -331,6 +331,10 @@ def load_dataset(dataset_path):
         return RealsenseDataset()
     if "webcam" in split_dataset_type:
         return Webcam()
+    if "vivid" in split_dataset_type:
+        return VIVIDDataset(dataset_path)
+    if "rrxio" in split_dataset_type:
+        return RRXIODataset(dataset_path)
 
     ext = split_dataset_type[-1].split(".")[-1]
     if ext in ["mp4", "avi", "MOV", "mov"]:
