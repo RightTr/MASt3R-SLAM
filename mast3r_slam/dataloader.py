@@ -64,7 +64,7 @@ class MonocularDataset(torch.utils.data.Dataset):
         return self.camera_intrinsics is not None
 
 
-class TUMDataset(MonocularDataset):
+class VIVIDDataset(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
@@ -72,22 +72,21 @@ class TUMDataset(MonocularDataset):
         tstamp_rgb = np.loadtxt(rgb_list, delimiter=" ", dtype=np.unicode_, skiprows=0)
         self.rgb_files = [self.dataset_path / f for f in tstamp_rgb[:, 1]]
         self.timestamps = tstamp_rgb[:, 0]
-
-        match = re.search(r"freiburg(\d+)", dataset_path)
-        idx = int(match.group(1))
-        if idx == 1:
-            calib = np.array(
-                [517.3, 516.5, 318.6, 255.3, 0.2624, -0.9531, -0.0054, 0.0026, 1.1633]
-            )
-        if idx == 2:
-            calib = np.array(
-                [520.9, 521.0, 325.1, 249.7, 0.2312, -0.7849, -0.0033, -0.0001, 0.9172]
-            )
-        if idx == 3:
-            calib = np.array([535.4, 539.2, 320.1, 247.6])
-        W, H = 640, 480
+        calib = np.array([437.38861083256637, 437.29475745770907, 323.5284494924228, 256.36315482047905, 0, 0, 0, 0, 0])
+        W, H = 640, 512
         self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
 
+class RRXIODataset(MonocularDataset):
+    def __init__(self, dataset_path):
+        super().__init__()
+        self.dataset_path = pathlib.Path(dataset_path)
+        rgb_list = self.dataset_path / "rgb.txt"
+        tstamp_rgb = np.loadtxt(rgb_list, delimiter=" ", dtype=np.unicode_, skiprows=0)
+        self.rgb_files = [self.dataset_path / f for f in tstamp_rgb[:, 1]]
+        self.timestamps = tstamp_rgb[:, 0]
+        calib = np.array([334.19639643, 334.26241379, 318.48142004, 250.56663663, 0, 0, 0, 0, 0])
+        W, H = 640, 512
+        self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
 
 class EurocDataset(MonocularDataset):
     def __init__(self, dataset_path):
