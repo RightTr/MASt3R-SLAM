@@ -23,6 +23,7 @@ from mast3r_slam.multiprocess_utils import new_queue, try_get_msg
 from mast3r_slam.tracker import FrameTracker
 from mast3r_slam.visualization import WindowMsg, run_visualization
 import torch.multiprocessing as mp
+import os
 
 
 def relocalization(frame, keyframes, factor_graph, retrieval_database):
@@ -321,6 +322,9 @@ if __name__ == "__main__":
         eval.save_keyframes(
             save_dir / "keyframes" / seq_name, dataset.timestamps, keyframes
         )
+        eval.evaluate(save_dir, dataset.timestamps, dataset.imgsdir_gt, 
+                      dataset.posesdir_gt, keyframes)
+
     if save_frames:
         savedir = pathlib.Path(f"logs/frames/{datetime_now}")
         savedir.mkdir(exist_ok=True, parents=True)

@@ -6,6 +6,8 @@ import numpy as np
 import torch
 import pyrealsense2 as rs
 import yaml
+import glob
+import os
 
 from mast3r_slam.mast3r_utils import resize_img
 from mast3r_slam.config import config
@@ -63,8 +65,7 @@ class MonocularDataset(torch.utils.data.Dataset):
     def has_calib(self):
         return self.camera_intrinsics is not None
 
-
-class VIVIDDataset(MonocularDataset):
+class TUMDataset(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
@@ -72,6 +73,30 @@ class VIVIDDataset(MonocularDataset):
         tstamp_rgb = np.loadtxt(rgb_list, delimiter=" ", dtype=np.unicode_, skiprows=0)
         self.rgb_files = [self.dataset_path / f for f in tstamp_rgb[:, 1]]
         self.timestamps = tstamp_rgb[:, 0]
+
+        match = re.search(r"freiburg(\d+)", dataset_path)
+        idx = int(match.group(1))
+        if idx == 1:
+            calib = np.array(
+                [517.3, 516.5, 318.6, 255.3, 0.2624, -0.9531, -0.0054, 0.0026, 1.1633]
+            )
+        if idx == 2:
+            calib = np.array(
+                [520.9, 521.0, 325.1, 249.7, 0.2312, -0.7849, -0.0033, -0.0001, 0.9172]
+            )
+        if idx == 3:
+            calib = np.array([535.4, 539.2, 320.1, 247.6])
+        W, H = 640, 480
+        self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
+
+class VIVIDDataset(MonocularDataset):
+    def __init__(self, dataset_path):
+        super().__init__()
+        self.dataset_path = pathlib.Path(dataset_path)
+        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "Thermal_fs/data/*.png")))
+        self.imgsdir_gt = os.path.join(self.dataset_path, "Thermal_fs/data")
+        self.posesdir_gt = os.path.join(self.dataset_path, "gt_thermal.txt")
+        self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
         calib = np.array([437.38861083256637, 437.29475745770907, 323.5284494924228, 256.36315482047905, 0, 0, 0, 0, 0])
         W, H = 640, 512
         self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
@@ -80,10 +105,9 @@ class RRXIODataset(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
-        rgb_list = self.dataset_path / "rgb.txt"
-        tstamp_rgb = np.loadtxt(rgb_list, delimiter=" ", dtype=np.unicode_, skiprows=0)
-        self.rgb_files = [self.dataset_path / f for f in tstamp_rgb[:, 1]]
-        self.timestamps = tstamp_rgb[:, 0]
+        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "Thermal_fs/data/*.png")))
+        self.gtdir = os.path.join(self.dataset_path, "Thermal_fs/data")
+        self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
         calib = np.array([334.19639643, 334.26241379, 318.48142004, 250.56663663, 0, 0, 0, 0, 0])
         W, H = 640, 512
         self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
@@ -261,8 +285,7 @@ class MP4Dataset(MonocularDataset):
         img = img.astype(self.dtype)
         timestamp = idx / self.fps
         self.timestamps.append(timestamp)
-        return img
-
+        return imginput_folder
 
 class RGBFiles(MonocularDataset):
     def __init__(self, dataset_path):
@@ -330,7 +353,7 @@ def load_dataset(dataset_path):
         return RealsenseDataset()
     if "webcam" in split_dataset_type:
         return Webcam()
-    if "vivid" in split_dataset_type:
+    if "KAIST_VIVID" in split_dataset_type:
         return VIVIDDataset(dataset_path)
     if "rrxio" in split_dataset_type:
         return RRXIODataset(dataset_path)
