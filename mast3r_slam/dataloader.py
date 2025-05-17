@@ -105,13 +105,54 @@ class RRXIODataset(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
-        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "thermal_undistort/*.png")))
         self.imgsdir_gt = os.path.join(self.dataset_path, "thermal_undistort/")
         self.posesdir_gt = os.path.join(self.dataset_path, "gt_thermal.txt")
+        self.imgs_with_tstamp = os.path.join(self.dataset_path, "thermal_undistort.txt")
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
+        self.max_dt = 0.08
+        self.frame_rate = 32
         calib = np.array([334.19639643, 334.26241379, 318.48142004, 250.56663663, 0, 0, 0, 0, 0])
         W, H = 640, 512
         self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
+        imgs_data = np.loadtxt(self.imgs_with_tstamp, delimiter=" ", dtype=np.unicode_)
+        poses_data = np.loadtxt(self.posesdir_gt, delimiter=" ", dtype=np.unicode_, skiprows=1)
+        
+        tstamp_image = imgs_data[:, 0].astype(np.float64)
+        tstamp_pose = poses_data[:, 0].astype(np.float64)
+        
+        associations = self.associate_frames(tstamp_image, tstamp_pose)
+
+        print('Found {} associations out of {} images and {} poses!'.format(
+            len(associations), len(tstamp_image), len(tstamp_pose)))
+
+        indicies = [0]
+        for i in range(1, len(associations)):
+            t0 = tstamp_image[associations[indicies[-1]][0]]
+            t1 = tstamp_image[associations[i][0]]
+            if t1 - t0 > 1.0 / self.frame_rate:
+                indicies += [i]
+
+        self.frames = []
+        for ix in indicies:
+            (i, j) = associations[ix]
+            self.rgb_files += [os.path.join(self.dataset_path, imgs_data[i, 1])]
+            pose_tstamp = poses_data[j, 0]
+
+            frame = {
+                "rgb_files": str(imgs_data[i, 1]),
+                "pose_tstamp": pose_tstamp
+                }
+
+            self.frames.append(frame)
+        
+    def associate_frames(self, timestamp_image, timestamp_pose):
+        associations = []
+        for i, t in enumerate(timestamp_image):
+            if timestamp_pose is not None:
+                j = np.argmin(np.abs(timestamp_pose - t))
+                if np.abs(timestamp_pose[j] - t) < self.max_dt:
+                    associations.append((i, j))
+        return associations
 
 class EurocDataset(MonocularDataset):
     def __init__(self, dataset_path):
