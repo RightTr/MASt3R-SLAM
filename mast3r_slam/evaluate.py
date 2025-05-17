@@ -38,7 +38,7 @@ def xyzw_to_wxyz(vec):
     return np.concatenate([t, q_wxyz])
 
 def compute_ate(poses_gt, poses_est, timestamps_kf, 
-                monocular=False, frames = None):
+                monocular=False):
     assert len(poses_gt) == len(poses_est)
     poses_gt = np.array(poses_gt)
     poses_est = np.array(poses_est)
@@ -77,8 +77,6 @@ def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt,
         lines = [line for line in f.readlines() if not line.strip().startswith("#")]
     for i in range(len(keyframes)):
         keyframe = keyframes[i]
-        t = timestamps[keyframe.frame_id]
-        timestamps_kf.append(t)
         if intrinsics is None:
             T_WC = as_SE3(keyframe.T_WC)
         else:
@@ -86,30 +84,32 @@ def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt,
             
         poses_est.append(xyzw_to_wxyz(T_WC.data.numpy().reshape(-1))) 
         if associated_frames is not None:
+            t = timestamps[keyframe.frame_id]
+            t = os.path.splitext(t)[0]
+            timestamps_kf.append(t)
             for frame in associated_frames:
                 img_path = frame["rgb_files"]
                 img_name_with_ext = os.path.basename(img_path) 
-                img_name, _ = os.path.splitext(img_name_with_ext) 
-                img_time = float(img_name)
-                if abs(img_time - t) < 1e-6:
+                img_time, _ = os.path.splitext(img_name_with_ext) 
+                if abs(float(img_time) - float(t)) < 1e-6:
                     pose_tstamp = frame["pose_tstamp"]
                     break
 
             for idx, line in enumerate(lines):
                 data = line.strip().split()
-                if len(data) < 8:
-                    continue
-                t = float(data[0])
-                if abs(t - pose_tstamp) < 1e-6:
+                tstamp = float(data[0])
+                if abs(float(tstamp) - float(pose_tstamp)) < 1e-6:
                     pose_line_idx = idx
                     break
                 
             poses_gt.append(xyzw_to_wxyz(np.array(list(map(float, lines[int(pose_line_idx)].split())))[1:8]))
         else: 
+            t = timestamps[keyframe.frame_id]
+            timestamps_kf.append(t)
             poses_gt.append(xyzw_to_wxyz(np.array(list(map(float, lines[int(t)].split())))[1:8]))
 
-        image_est = (keyframe.uimg.cpu().numpy() * 255).astype(np.uint8)
         image_gt = np.array(Image.open(os.path.join(imgsdir_gt, f"{t}.png")).convert("RGB"))
+        image_est = (keyframe.uimg.cpu().numpy() * 255).astype(np.uint8)
         if image_gt.shape != image_est.shape:
             image_gt = Image.fromarray(image_gt).resize((image_est.shape[1], image_est.shape[0]), Image.BILINEAR)
             image_gt = np.array(image_gt)
@@ -131,8 +131,7 @@ def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt,
     psnr_mean = np.mean(psnrs)
     ssim_mean = np.mean(ssims)
     lpips_mean = np.mean(lpips_scores)
-    ate = compute_ate(poses_gt, poses_est, timestamps_kf, 
-                      monocular=True, frames=associated_frames)
+    ate = compute_ate(poses_gt, poses_est, timestamps_kf, monocular=True)
     with open(csv_path, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["PSNR", "SSIM", "LPIPS", "ATE"])

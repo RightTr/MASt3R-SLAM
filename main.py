@@ -323,7 +323,7 @@ if __name__ == "__main__":
             save_dir / "keyframes" / seq_name, dataset.timestamps, keyframes
         )
         eval.evaluate(save_dir, dataset.timestamps, dataset.imgsdir_gt, 
-                      dataset.posesdir_gt, keyframes)
+                      dataset.posesdir_gt, keyframes, associated_frames=dataset.frames)
 
     if save_frames:
         savedir = pathlib.Path(f"logs/frames/{datetime_now}")

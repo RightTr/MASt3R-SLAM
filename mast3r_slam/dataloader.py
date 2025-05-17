@@ -28,6 +28,7 @@ class MonocularDataset(torch.utils.data.Dataset):
         self.camera_intrinsics = None
         self.use_calibration = config["use_calib"]
         self.save_results = True
+        self.frames = []
 
     def __len__(self):
         return len(self.rgb_files)
@@ -108,9 +109,9 @@ class RRXIODataset(MonocularDataset):
         self.imgsdir_gt = os.path.join(self.dataset_path, "thermal_undistort/")
         self.posesdir_gt = os.path.join(self.dataset_path, "gt_thermal.txt")
         self.imgs_with_tstamp = os.path.join(self.dataset_path, "thermal_undistort.txt")
-        self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
+        self.rgb_files = []
         self.max_dt = 0.08
-        self.frame_rate = 32
+        self.frame_rate = 30
         calib = np.array([334.19639643, 334.26241379, 318.48142004, 250.56663663, 0, 0, 0, 0, 0])
         W, H = 640, 512
         self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
@@ -144,6 +145,7 @@ class RRXIODataset(MonocularDataset):
                 }
 
             self.frames.append(frame)
+        self.timestamps = [os.path.basename(f)for f in self.rgb_files]
         
     def associate_frames(self, timestamp_image, timestamp_pose):
         associations = []
