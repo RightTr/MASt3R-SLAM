@@ -22,7 +22,6 @@ from evo.core.metrics import PoseRelation, StatisticsType
 from evo.core import sync
 import copy
 
-
 def prepare_savedir(args, dataset):
     last_path = os.path.basename(str(dataset.dataset_path))
     save_dir = pathlib.Path(f"logs/{last_path}")
@@ -38,24 +37,20 @@ def xyzw_to_wxyz(vec):
     q_wxyz = np.roll(q_xyzw, 1)
     return np.concatenate([t, q_wxyz])
 
-def compute_ate(poses_gt, poses_est, timestamps, monocular=False):
+def compute_ate(poses_gt, poses_est, timestamps_kf, monocular=False):
     assert len(poses_gt) == len(poses_est)
     poses_gt = np.array(poses_gt)
     poses_est = np.array(poses_est)
-    min_len = min(len(poses_gt), len(poses_est), len(timestamps))
-    poses_gt = poses_gt[:min_len]
-    poses_est = poses_est[:min_len]
-    timestamps = timestamps[:min_len]
 
     traj_est = PoseTrajectory3D(
     positions_xyz=poses_est[:, :3],
     orientations_quat_wxyz=poses_est[:, 3:], 
-    timestamps=np.array(timestamps, dtype=np.float64))
+    timestamps=np.array(timestamps_kf, dtype=np.float64))
 
     traj_ref = PoseTrajectory3D(
         positions_xyz=poses_gt[:, :3],
         orientations_quat_wxyz=poses_gt[:, 3:],
-        timestamps=np.array(timestamps, dtype=np.float64))
+        timestamps=np.array(timestamps_kf, dtype=np.float64))
 
     traj_ref, traj_est = sync.associate_trajectories(traj_ref, traj_est)
 
@@ -67,19 +62,19 @@ def compute_ate(poses_gt, poses_est, timestamps, monocular=False):
 
     return ape_metric.get_statistic(StatisticsType.rmse)
 
-
 def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt
              , keyframes: SharedKeyframes, intrinsics: Optional[Intrinsics] = None):
     transform = transforms.Compose([transforms.ToTensor()])
     lpips_model = lpips.LPIPS(net='alex').to("cuda:0")
     psnrs, ssims, lpips_scores = [], [], []
-    poses_est, poses_gt = [], []
+    poses_est, poses_gt, timestamps_kf = [], [], []
     csv_path = os.path.join(savedir, "metrics.csv")
     with open(posesdir_gt, "r") as f:
         lines = [line for line in f.readlines() if not line.strip().startswith("#")]
     for i in range(len(keyframes)):
         keyframe = keyframes[i]
         t = timestamps[keyframe.frame_id]
+        timestamps_kf.append(t)
         if intrinsics is None:
             T_WC = as_SE3(keyframe.T_WC)
         else:
@@ -110,7 +105,7 @@ def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt
     psnr_mean = np.mean(psnrs)
     ssim_mean = np.mean(ssims)
     lpips_mean = np.mean(lpips_scores)
-    ate = compute_ate(poses_gt, poses_est, timestamps, monocular=True)
+    ate = compute_ate(poses_gt, poses_est, timestamps_kf, monocular=True)
     with open(csv_path, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["PSNR", "SSIM", "LPIPS", "ATE"])
