@@ -16,6 +16,11 @@ from PIL import Image
 from skimage.metrics import structural_similarity as ssim
 import csv
 from scipy.spatial.transform import Rotation as R
+from evo.core.trajectory import PoseTrajectory3D
+from evo.core import metrics
+from evo.core.metrics import PoseRelation, StatisticsType
+from evo.core import sync
+import copy
 
 
 def prepare_savedir(args, dataset):
@@ -27,31 +32,41 @@ def prepare_savedir(args, dataset):
     seq_name = dataset.dataset_path.stem
     return save_dir, seq_name
 
-def pose_vec2matrix(pose):
-    t = pose[:3]
-    q = pose[3:]
-    rot = R.from_quat(q).as_matrix()
-    mat = np.eye(4)
-    mat[:3, :3] = rot
-    mat[:3, 3] = t
-    return mat
+def xyzw_to_wxyz(vec):
+    t = vec[:3]
+    q_xyzw = vec[3:]
+    q_wxyz = np.roll(q_xyzw, 1)
+    return np.concatenate([t, q_wxyz])
 
-def compute_ate(poses_gt, poses_est):
+def compute_ate(poses_gt, poses_est, timestamps, monocular=False):
     assert len(poses_gt) == len(poses_est)
-    poses_gt_mat = np.array([pose_vec2matrix(p) for p in poses_gt])
-    poses_est_mat = np.array([pose_vec2matrix(p) for p in poses_est])
-    positions_gt = poses_gt_mat[:, :3, 3]
-    positions_est = poses_est_mat[:, :3, 3]
-    mu_gt = np.mean(positions_gt, axis=0)
-    mu_est = np.mean(positions_est, axis=0)
-    X = positions_gt - mu_gt
-    Y = positions_est - mu_est
-    U, _, Vt = np.linalg.svd(X.T @ Y)
-    R_ = U @ Vt
-    t_ = mu_gt - R_ @ mu_est
-    aligned_est = (R_ @ positions_est.T).T + t_
-    errors = np.linalg.norm(aligned_est - positions_gt, axis=1)
-    return np.sqrt(np.mean(errors ** 2))
+    poses_gt = np.array(poses_gt)
+    poses_est = np.array(poses_est)
+    min_len = min(len(poses_gt), len(poses_est), len(timestamps))
+    poses_gt = poses_gt[:min_len]
+    poses_est = poses_est[:min_len]
+    timestamps = timestamps[:min_len]
+
+    traj_est = PoseTrajectory3D(
+    positions_xyz=poses_est[:, :3],
+    orientations_quat_wxyz=poses_est[:, 3:], 
+    timestamps=np.array(timestamps, dtype=np.float64))
+
+    traj_ref = PoseTrajectory3D(
+        positions_xyz=poses_gt[:, :3],
+        orientations_quat_wxyz=poses_gt[:, 3:],
+        timestamps=np.array(timestamps, dtype=np.float64))
+
+    traj_ref, traj_est = sync.associate_trajectories(traj_ref, traj_est)
+
+    traj_est_aligned = copy.deepcopy(traj_est)
+    traj_est_aligned.align(traj_ref, correct_scale=monocular)
+
+    ape_metric = metrics.APE(PoseRelation.translation_part)
+    ape_metric.process_data((traj_ref, traj_est_aligned))
+
+    return ape_metric.get_statistic(StatisticsType.rmse)
+
 
 def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt
              , keyframes: SharedKeyframes, intrinsics: Optional[Intrinsics] = None):
@@ -69,8 +84,8 @@ def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt
             T_WC = as_SE3(keyframe.T_WC)
         else:
             T_WC = intrinsics.refine_pose_with_calibration(keyframe)
-        poses_est.append(T_WC.data.numpy().reshape(-1)) 
-        poses_gt.append(np.array(list(map(float, lines[int(t)].split())))[1:8])
+        poses_est.append(xyzw_to_wxyz(T_WC.data.numpy().reshape(-1))) 
+        poses_gt.append(xyzw_to_wxyz(np.array(list(map(float, lines[int(t)].split())))[1:8]))
 
         image_est = (keyframe.uimg.cpu().numpy() * 255).astype(np.uint8)
         image_gt = np.array(Image.open(os.path.join(imgsdir_gt, f"{t}.png")).convert("RGB"))
@@ -81,7 +96,7 @@ def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt
         image_gt_norm = image_gt.astype(np.float32) / 255.0
         est_tensor = transform(image_est_norm).unsqueeze(0).to("cuda:0")
         gt_tensor = transform(image_gt_norm).unsqueeze(0).to("cuda:0")
-        # ssimposes_gt
+        # ssim
         ssim_score = ssim(image_est_norm, image_gt_norm, channel_axis=-1, data_range=1.0)
         ssims.append(ssim_score)
         # psnr
@@ -95,7 +110,7 @@ def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt
     psnr_mean = np.mean(psnrs)
     ssim_mean = np.mean(ssims)
     lpips_mean = np.mean(lpips_scores)
-    ate = compute_ate(poses_gt, poses_est)
+    ate = compute_ate(poses_gt, poses_est, timestamps, monocular=True)
     with open(csv_path, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["PSNR", "SSIM", "LPIPS", "ATE"])

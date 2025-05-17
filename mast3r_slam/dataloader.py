@@ -94,7 +94,7 @@ class VIVIDDataset(MonocularDataset):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
         self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "Thermal_fs/data/*.png")))
-        self.imgsdir_gt = os.path.join(self.dataset_path, "Thermal_fs/data")
+        self.imgsdir_gt = os.path.join(self.dataset_path, "Thermal_fs/data/")
         self.posesdir_gt = os.path.join(self.dataset_path, "gt_thermal.txt")
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
         calib = np.array([437.38861083256637, 437.29475745770907, 323.5284494924228, 256.36315482047905, 0, 0, 0, 0, 0])
@@ -105,8 +105,9 @@ class RRXIODataset(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
-        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "Thermal_fs/data/*.png")))
-        self.gtdir = os.path.join(self.dataset_path, "Thermal_fs/data")
+        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "thermal_undistort/*.png")))
+        self.imgsdir_gt = os.path.join(self.dataset_path, "thermal_undistort/")
+        self.posesdir_gt = os.path.join(self.dataset_path, "gt_thermal.txt")
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
         calib = np.array([334.19639643, 334.26241379, 318.48142004, 250.56663663, 0, 0, 0, 0, 0])
         W, H = 640, 512
