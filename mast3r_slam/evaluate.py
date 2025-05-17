@@ -83,7 +83,7 @@ def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt,
             T_WC = intrinsics.refine_pose_with_calibration(keyframe)
             
         poses_est.append(xyzw_to_wxyz(T_WC.data.numpy().reshape(-1))) 
-        if associated_frames is not None:
+        if associated_frames != []:
             t = timestamps[keyframe.frame_id]
             t = os.path.splitext(t)[0]
             timestamps_kf.append(t)
