@@ -9,13 +9,9 @@ from mast3r_slam.lietorch_utils import as_SE3
 from mast3r_slam.config import config
 from mast3r_slam.geometry import constrain_points_to_ray
 from plyfile import PlyData, PlyElement
-import lpips
-import torchvision.transforms as transforms
 import os
 from PIL import Image
-from skimage.metrics import structural_similarity as ssim
 import csv
-from scipy.spatial.transform import Rotation as R
 from evo.core.trajectory import PoseTrajectory3D
 from evo.core import metrics
 from evo.core.metrics import PoseRelation, StatisticsType
@@ -63,13 +59,10 @@ def compute_ate(poses_gt, poses_est, timestamps_kf,
 
     return ape_metric.get_statistic(StatisticsType.rmse)
 
-def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt, 
+def evaluate(savedir, timestamps, posesdir_gt, 
              keyframes: SharedKeyframes, 
              intrinsics: Optional[Intrinsics] = None,
              associated_frames = None):
-    transform = transforms.Compose([transforms.ToTensor()])
-    lpips_model = lpips.LPIPS(net='alex').to("cuda:0")
-    psnrs, ssims, lpips_scores = [], [], []
     poses_est, poses_gt, timestamps_kf = [], [], []
     csv_path = os.path.join(savedir, "metrics.csv")
     pose_line_idx = -1
@@ -108,34 +101,11 @@ def evaluate(savedir, timestamps, imgsdir_gt, posesdir_gt,
             timestamps_kf.append(t)
             poses_gt.append(xyzw_to_wxyz(np.array(list(map(float, lines[int(t)].split())))[1:8]))
 
-        image_gt = np.array(Image.open(os.path.join(imgsdir_gt, f"{t}.png")).convert("RGB"))
-        image_est = (keyframe.uimg.cpu().numpy() * 255).astype(np.uint8)
-        if image_gt.shape != image_est.shape:
-            image_gt = Image.fromarray(image_gt).resize((image_est.shape[1], image_est.shape[0]), Image.BILINEAR)
-            image_gt = np.array(image_gt)
-        image_est_norm = image_est.astype(np.float32) / 255.0
-        image_gt_norm = image_gt.astype(np.float32) / 255.0
-        est_tensor = transform(image_est_norm).unsqueeze(0).to("cuda:0")
-        gt_tensor = transform(image_gt_norm).unsqueeze(0).to("cuda:0")
-        # ssim
-        ssim_score = ssim(image_est_norm, image_gt_norm, channel_axis=-1, data_range=1.0)
-        ssims.append(ssim_score)
-        # psnr
-        mse = torch.mean((est_tensor - gt_tensor) ** 2)
-        psnr_score = 20 * torch.log10(1.0 / torch.sqrt(mse))
-        psnrs.append(psnr_score.item())
-        # lpips
-        lpips_val = lpips_model(est_tensor, gt_tensor)
-        lpips_scores.append(lpips_val.item())
-
-    psnr_mean = np.mean(psnrs)
-    ssim_mean = np.mean(ssims)
-    lpips_mean = np.mean(lpips_scores)
     ate = compute_ate(poses_gt, poses_est, timestamps_kf, monocular=True)
     with open(csv_path, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(["PSNR", "SSIM", "LPIPS", "ATE"])
-        writer.writerow([psnr_mean, ssim_mean, lpips_mean, ate])
+        writer.writerow(["ATE"])
+        writer.writerow([ate])
             
 def save_traj(
     logdir,

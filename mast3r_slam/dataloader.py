@@ -95,7 +95,6 @@ class VIVIDDataset(MonocularDataset):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
         self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "Thermal_fs/data/*.png")))
-        self.imgsdir_gt = os.path.join(self.dataset_path, "Thermal_fs/data/")
         self.posesdir_gt = os.path.join(self.dataset_path, "gt_thermal.txt")
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
         calib = np.array([437.38861083256637, 437.29475745770907, 323.5284494924228, 256.36315482047905, 0, 0, 0, 0, 0])
@@ -106,7 +105,6 @@ class RRXIODataset(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
-        self.imgsdir_gt = os.path.join(self.dataset_path, "thermal_undistort/")
         self.posesdir_gt = os.path.join(self.dataset_path, "gt_thermal.txt")
         self.imgs_with_tstamp = os.path.join(self.dataset_path, "thermal_undistort.txt")
         self.rgb_files = []
@@ -133,7 +131,6 @@ class RRXIODataset(MonocularDataset):
             if t1 - t0 > 1.0 / self.frame_rate:
                 indicies += [i]
 
-        self.frames = []
         for ix in indicies:
             (i, j) = associations[ix]
             self.rgb_files += [os.path.join(self.dataset_path, imgs_data[i, 1])]
