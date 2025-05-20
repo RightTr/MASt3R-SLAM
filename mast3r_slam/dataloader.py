@@ -11,6 +11,7 @@ import os
 
 from mast3r_slam.mast3r_utils import resize_img
 from mast3r_slam.config import config
+from scipy.spatial.transform import Rotation, Slerp
 
 HAS_TORCHCODEC = True
 try:
@@ -107,8 +108,8 @@ class VIVIDDataset(MonocularDataset):
             lines = f.readlines()
         for i in range(1, self.n_img):
             line = lines[i]
-            c2w_vec = np.array(list(map(float, line.split())))
-            poses.append(c2w_vec)
+            vec = np.array(list(map(float, line.split()))[1:8])
+            poses.append(vec)
         return poses
 
 class RRXIODataset(MonocularDataset):
@@ -143,8 +144,8 @@ class RRXIODataset(MonocularDataset):
         for ix in indicies:
             (i, j) = associations[ix]
             self.rgb_files += [os.path.join(self.dataset_path, imgs_data[i, 1])]
-            c2w_vec= poses_data[j, 1:8].astype(np.float64)
-            self.poses.append(c2w_vec)
+            vec= poses_data[j, 1:8].astype(np.float64)
+            self.poses.append(vec)
 
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
         
@@ -156,6 +157,70 @@ class RRXIODataset(MonocularDataset):
                 if np.abs(timestamp_pose[j] - t) < self.max_dt:
                     associations.append((i, j))
         return associations
+    
+class SmokeBasementDataset(MonocularDataset):
+    def __init__(self, dataset_path):
+        super().__init__()
+        self.dataset_path = pathlib.Path(dataset_path)
+        self.poses = []
+        run_dir = os.path.dirname(self.dataset_path)
+        right_or_left = os.path.basename(self.dataset_path)
+        poses_data = np.loadtxt(os.path.join(run_dir, "kissicp_poses.txt"), delimiter=" ", dtype=np.unicode_)
+
+        with open(os.path.join(self.dataset_path, "times.txt")) as f:
+            lines = f.readlines()
+        timestamps = []
+        for line in lines:
+            line = line.strip()
+            ts_str = line.split(",")[0].strip()
+            timestamps.append(ts_str)
+        imgs_tstamp = np.array(timestamps)
+
+        calib = np.zeros(9)
+        lidar2cam = np.eye(4)
+        if right_or_left == "right":
+            lidar2cam = np.array([[-1, 0, 0, 0.06],
+                            [0, 0, -1, -0.072],
+                            [0, -1, 0, -0.145],
+                            [0, 0, 0, 1]])
+            calib = np.array([358.484823, 357.311578, 317.492363, 267.103537, -0.212959, 0.039110, 0.000939, 0.001243, 0])
+        elif right_or_left == "left":
+            lidar2cam = np.array([[-1, 0, 0, -0.06],
+                            [0, 0, -1, 0.072],
+                            [0, -1, 0, 0.145],
+                            [0, 0, 0, 1]])
+            calib = np.array([358.009390, 356.631007, 320.649615, 268.477546, -0.210408, 0.037092, 0.000217, 0.000702, 0])
+
+        for t in imgs_tstamp:
+            self.rgb_files += [os.path.join(self.dataset_path, "temp_fs", t + '.png')]
+            print(os.path.join(self.dataset_path, "temp_fs", t + '.png'))
+            T = self.linear_interpol(poses_data, float(t))
+            self.poses.append(np.dot(T, np.linalg.inv(lidar2cam)))
+
+        self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
+
+        W, H = 640, 512
+        self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
+
+    def linear_interpol(self, pose_data, time):
+        times = pose_data[:, 0].astype(np.float64)
+        poses = pose_data[:, 1:].astype(np.float64)
+
+        interpolated_translation = np.array([np.interp(time, times, poses[:, i]) for i in range(3)])
+        quaternions = Rotation.from_quat(poses[:, 3:7])
+        if time <= times[0]:
+            interpolated_rotation = quaternions[0]
+        elif time >= times[-1]:
+            interpolated_rotation = quaternions[-1]
+        else:
+            slerp = Slerp(times, quaternions)
+            interpolated_rotation = slerp(time)
+
+        rotation_matrix = interpolated_rotation.as_matrix()
+        interpolated_pose = np.eye(4)
+        interpolated_pose[0:3, 3] = interpolated_translation
+        interpolated_pose[0:3, 0:3] = rotation_matrix
+        return interpolated_pose
 
 class EurocDataset(MonocularDataset):
     def __init__(self, dataset_path):
@@ -402,6 +467,8 @@ def load_dataset(dataset_path):
         return VIVIDDataset(dataset_path)
     if "rrxio" in split_dataset_type:
         return RRXIODataset(dataset_path)
+    if "SmokeBasement" in split_dataset_type:
+        return SmokeBasementDataset(dataset_path)
 
     ext = split_dataset_type[-1].split(".")[-1]
     if ext in ["mp4", "avi", "MOV", "mov"]:
