@@ -28,7 +28,6 @@ class MonocularDataset(torch.utils.data.Dataset):
         self.camera_intrinsics = None
         self.use_calibration = config["use_calib"]
         self.save_results = True
-        self.frames = []
 
     def __len__(self):
         return len(self.rgb_files)
@@ -95,26 +94,36 @@ class VIVIDDataset(MonocularDataset):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
         self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "Thermal_fs/data/*.png")))
-        self.posesdir_gt = os.path.join(self.dataset_path, "gt_thermal.txt")
+        self.n_img = len(self.rgb_files)
+        self.poses = self.load_poses(os.path.join(self.dataset_path, "gt_thermal.txt"))
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
         calib = np.array([437.38861083256637, 437.29475745770907, 323.5284494924228, 256.36315482047905, 0, 0, 0, 0, 0])
         W, H = 640, 512
         self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
 
+    def load_poses(self, path):
+        poses = []
+        with open(path, "r") as f:
+            lines = f.readlines()
+        for i in range(1, self.n_img):
+            line = lines[i]
+            c2w_vec = np.array(list(map(float, line.split())))
+            poses.append(c2w_vec)
+        return poses
+
 class RRXIODataset(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
-        self.posesdir_gt = os.path.join(self.dataset_path, "gt_thermal.txt")
-        self.imgs_with_tstamp = os.path.join(self.dataset_path, "thermal_undistort.txt")
-        self.rgb_files = []
         self.max_dt = 0.08
         self.frame_rate = 30
+        self.rgb_files = []
+        self.poses = []
+        imgs_data = np.loadtxt(os.path.join(self.dataset_path, "thermal_undistort.txt"), delimiter=" ", dtype=np.unicode_)
+        poses_data = np.loadtxt(os.path.join(self.dataset_path, "gt_thermal.txt"), delimiter=" ", dtype=np.unicode_, skiprows=1)
         calib = np.array([334.19639643, 334.26241379, 318.48142004, 250.56663663, 0, 0, 0, 0, 0])
         W, H = 640, 512
         self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
-        imgs_data = np.loadtxt(self.imgs_with_tstamp, delimiter=" ", dtype=np.unicode_)
-        poses_data = np.loadtxt(self.posesdir_gt, delimiter=" ", dtype=np.unicode_, skiprows=1)
         
         tstamp_image = imgs_data[:, 0].astype(np.float64)
         tstamp_pose = poses_data[:, 0].astype(np.float64)
@@ -134,15 +143,10 @@ class RRXIODataset(MonocularDataset):
         for ix in indicies:
             (i, j) = associations[ix]
             self.rgb_files += [os.path.join(self.dataset_path, imgs_data[i, 1])]
-            pose_tstamp = poses_data[j, 0]
+            c2w_vec= poses_data[j, 1:8].astype(np.float64)
+            self.poses.append(c2w_vec)
 
-            frame = {
-                "rgb_files": str(imgs_data[i, 1]),
-                "pose_tstamp": pose_tstamp
-                }
-
-            self.frames.append(frame)
-        self.timestamps = [os.path.basename(f)for f in self.rgb_files]
+        self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
         
     def associate_frames(self, timestamp_image, timestamp_pose):
         associations = []

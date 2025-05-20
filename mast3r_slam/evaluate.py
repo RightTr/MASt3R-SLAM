@@ -10,13 +10,17 @@ from mast3r_slam.config import config
 from mast3r_slam.geometry import constrain_points_to_ray
 from plyfile import PlyData, PlyElement
 import os
-from PIL import Image
 import csv
 from evo.core.trajectory import PoseTrajectory3D
 from evo.core import metrics
 from evo.core.metrics import PoseRelation, StatisticsType
+from evo.tools.plot import PlotMode, prepare_axis, traj, traj_colormap
 from evo.core import sync
+from matplotlib import pyplot as plt
+import matplotlib
 import copy
+
+matplotlib.use('Agg')
 
 def prepare_savedir(args, dataset):
     last_path = os.path.basename(str(dataset.dataset_path))
@@ -33,8 +37,8 @@ def xyzw_to_wxyz(vec):
     q_wxyz = np.roll(q_xyzw, 1)
     return np.concatenate([t, q_wxyz])
 
-def compute_ate(poses_gt, poses_est, timestamps_kf, 
-                monocular=False):
+def evaluate_evo(poses_gt, poses_est, timestamps_kf,
+                savedir, monocular=False):
     assert len(poses_gt) == len(poses_est)
     poses_gt = np.array(poses_gt)
     poses_est = np.array(poses_est)
@@ -57,17 +61,38 @@ def compute_ate(poses_gt, poses_est, timestamps_kf,
     ape_metric = metrics.APE(PoseRelation.translation_part)
     ape_metric.process_data((traj_ref, traj_est_aligned))
 
-    return ape_metric.get_statistic(StatisticsType.rmse)
+    ape_stats = ape_metric.get_all_statistics()
+    rmse = ape_metric.get_statistic(metrics.StatisticsType.rmse)
+    for key, value in ape_stats.items():
+        ape_stats[key] = float(value)
 
-def evaluate(savedir, timestamps, posesdir_gt, 
+    plot_mode = PlotMode.xy
+    fig = plt.figure()
+    ax = prepare_axis(fig, plot_mode)
+    ax.set_title(f"ATE RMSE: {rmse}")
+    traj(ax, plot_mode, traj_ref, "--", "gray", "gt", plot_start_end_markers=True)
+    traj_colormap(
+        ax,
+        traj_est_aligned,
+        ape_metric.error,
+        plot_mode,
+        min_map=ape_stats["min"],
+        max_map=ape_stats["max"],
+        plot_start_end_markers=True,
+    )
+    ax.legend()
+    plt.savefig(os.path.join(savedir, "evo_2dplot.png"), dpi=90)
+
+    with open(os.path.join(savedir, "metrics.csv"), "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["ATE"])
+        writer.writerow([rmse])
+
+
+def evaluate(savedir, poses_gt_input, 
              keyframes: SharedKeyframes, 
-             intrinsics: Optional[Intrinsics] = None,
-             associated_frames = None):
+             intrinsics: Optional[Intrinsics] = None):
     poses_est, poses_gt, timestamps_kf = [], [], []
-    csv_path = os.path.join(savedir, "metrics.csv")
-    pose_line_idx = -1
-    with open(posesdir_gt, "r") as f:
-        lines = [line for line in f.readlines() if not line.strip().startswith("#")]
     for i in range(len(keyframes)):
         keyframe = keyframes[i]
         if intrinsics is None:
@@ -76,36 +101,10 @@ def evaluate(savedir, timestamps, posesdir_gt,
             T_WC = intrinsics.refine_pose_with_calibration(keyframe)
             
         poses_est.append(xyzw_to_wxyz(T_WC.data.numpy().reshape(-1))) 
-        if associated_frames != []:
-            t = timestamps[keyframe.frame_id]
-            t = os.path.splitext(t)[0]
-            timestamps_kf.append(t)
-            for frame in associated_frames:
-                img_path = frame["rgb_files"]
-                img_name_with_ext = os.path.basename(img_path) 
-                img_time, _ = os.path.splitext(img_name_with_ext) 
-                if abs(float(img_time) - float(t)) < 1e-6:
-                    pose_tstamp = frame["pose_tstamp"]
-                    break
+        poses_gt.append(xyzw_to_wxyz(poses_gt_input[keyframe.frame_id]))
+        timestamps_kf.append(keyframe.frame_id)
 
-            for idx, line in enumerate(lines):
-                data = line.strip().split()
-                tstamp = float(data[0])
-                if abs(float(tstamp) - float(pose_tstamp)) < 1e-6:
-                    pose_line_idx = idx
-                    break
-                
-            poses_gt.append(xyzw_to_wxyz(np.array(list(map(float, lines[int(pose_line_idx)].split())))[1:8]))
-        else: 
-            t = timestamps[keyframe.frame_id]
-            timestamps_kf.append(t)
-            poses_gt.append(xyzw_to_wxyz(np.array(list(map(float, lines[int(t)].split())))[1:8]))
-
-    ate = compute_ate(poses_gt, poses_est, timestamps_kf, monocular=True)
-    with open(csv_path, "w", newline="") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(["ATE"])
-        writer.writerow([ate])
+    evaluate_evo(poses_gt, poses_est, timestamps_kf, savedir, monocular=True)
             
 def save_traj(
     logdir,
