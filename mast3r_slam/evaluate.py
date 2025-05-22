@@ -23,7 +23,11 @@ import copy
 matplotlib.use('Agg')
 
 def prepare_savedir(args, dataset):
-    last_path = os.path.basename(str(dataset.dataset_path))
+    if "SmokeBasement" in str(dataset.dataset_path).split("/"):
+        last_path = os.path.join(*os.path.normpath(dataset.dataset_path).split(os.sep)[-2:])
+    else:
+        last_path = os.path.basename(dataset.dataset_path)
+
     save_dir = pathlib.Path(f"logs/{last_path}")
     if args.save_as != "default":
         save_dir = save_dir / args.save_as
@@ -103,7 +107,7 @@ def evaluate(savedir, poses_gt_input,
         poses_est.append(xyzw_to_wxyz(T_WC.data.numpy().reshape(-1))) 
         poses_gt.append(xyzw_to_wxyz(poses_gt_input[keyframe.frame_id]))
         timestamps_kf.append(keyframe.frame_id)
-
+        
     evaluate_evo(poses_gt, poses_est, timestamps_kf, savedir, monocular=True)
             
 def save_traj(

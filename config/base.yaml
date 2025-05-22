@@ -36,7 +36,7 @@ local_opt:
   pin: 1
   window_size: 1e+6   
   C_conf: 0.0
-  Q_conf: 0.5
+  Q_conf: 1.5
   min_match_frac: 0.1
   pixel_border: -10 # Only in calib (negative means allow pixels outside image up to that distance)
   depth_eps: 1e-6 # Only in calib case
@@ -50,9 +50,9 @@ local_opt:
   use_cuda: True
 
 retrieval:
-  k: 5
+  k: 3
   min_thresh: 5e-3
 
 reloc:
-  min_match_frac: 0.1
-  strict: False
+  min_match_frac: 0.3
+  strict: Trues

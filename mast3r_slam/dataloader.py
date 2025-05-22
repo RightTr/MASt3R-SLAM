@@ -192,10 +192,9 @@ class SmokeBasementDataset(MonocularDataset):
             calib = np.array([358.009390, 356.631007, 320.649615, 268.477546, -0.210408, 0.037092, 0.000217, 0.000702, 0])
 
         for t in imgs_tstamp:
-            self.rgb_files += [os.path.join(self.dataset_path, "temp_fs", t + '.png')]
-            print(os.path.join(self.dataset_path, "temp_fs", t + '.png'))
+            self.rgb_files += [os.path.join(self.dataset_path, "image", t + '.png')]
             T = self.linear_interpol(poses_data, float(t))
-            self.poses.append(np.dot(T, np.linalg.inv(lidar2cam)))
+            self.poses.append(self.matrix2vec(np.dot(T, np.linalg.inv(lidar2cam))))
 
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
 
@@ -221,6 +220,38 @@ class SmokeBasementDataset(MonocularDataset):
         interpolated_pose[0:3, 3] = interpolated_translation
         interpolated_pose[0:3, 0:3] = rotation_matrix
         return interpolated_pose
+
+    def matrix2vec(self, mat):
+        t = mat[:3, 3]
+        rot_matrix = mat[:3, :3]
+        quat = Rotation.from_matrix(rot_matrix).as_quat() 
+        vec = np.concatenate([t, quat])
+        return vec
+    
+class NTU4DRadLMDataset(MonocularDataset):
+    def __init__(self, dataset_path):
+        super().__init__()
+        self.dataset_path = pathlib.Path(dataset_path)
+        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "thermal/*.png")))
+        self.n_img = len(self.rgb_files)
+        self.poses = []
+        # self.poses = self.load_poses(os.path.join(self.dataset_path, "gt_thermal.txt"))
+        self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
+        
+        calib = np.array([471.96351324104091, 339.03066128694218, 472.48642748309049, 277.74073717116710, 
+                          -1.8566954779749040e-01, 1.6745260846914475e-01, -1.8122010952647307e-04, 8.6534037842673963e-05, -1.0770856460153226e-01])
+        W, H = 640, 512
+        self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
+
+    def load_poses(self, path):
+        poses = []
+        with open(path, "r") as f:
+            lines = f.readlines()
+        for i in range(1, self.n_img):
+            line = lines[i]
+            vec = np.array(list(map(float, line.split()))[1:8])
+            poses.append(vec)
+        return poses
 
 class EurocDataset(MonocularDataset):
     def __init__(self, dataset_path):
@@ -469,6 +500,8 @@ def load_dataset(dataset_path):
         return RRXIODataset(dataset_path)
     if "SmokeBasement" in split_dataset_type:
         return SmokeBasementDataset(dataset_path)
+    if "NTU4DRadLM" in split_dataset_type:
+        return NTU4DRadLMDataset(dataset_path)
 
     ext = split_dataset_type[-1].split(".")[-1]
     if ext in ["mp4", "avi", "MOV", "mov"]:
