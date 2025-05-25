@@ -9,6 +9,8 @@ from mast3r.model import AsymmetricMASt3R
 from mast3r_slam.retrieval_database import RetrievalDatabase
 from mast3r_slam.config import config
 import mast3r_slam.matching as matching
+import imageio
+import matplotlib.pyplot as plt
 
 
 def load_mast3r(path=None, device="cuda"):
@@ -117,6 +119,9 @@ def mast3r_decode_symmetric_batch(
 
 @torch.inference_mode
 def mast3r_inference_mono(model, frame):
+    if not hasattr(mast3r_inference_mono, "counter"):
+        mast3r_inference_mono.counter = 0
+
     if frame.feat is None:
         frame.feat, frame.pos, _ = model._encode_image(frame.img, frame.img_true_shape)
 
@@ -135,6 +140,18 @@ def mast3r_inference_mono(model, frame):
 
     Xii, Xji = einops.rearrange(X, "b h w c -> b (h w) c")
     Cii, Cji = einops.rearrange(C, "b h w -> b (h w) 1")
+
+    depth_map = X[..., 2]
+    depth_map_np = depth_map.detach().cpu().numpy()
+    for i in range(depth_map_np.shape[0]):
+        depth_min = np.min(depth_map_np[i])
+        depth_max = np.max(depth_map_np[i])
+        depth_norm = (depth_map_np[i] - depth_min) / (depth_max - depth_min + 1e-8)
+        depth_color = plt.cm.jet(depth_norm)[:, :, :3]
+        depth_color_uint8 = (depth_color * 255).astype(np.uint8)
+        imageio.imwrite(f"/home/pi/Documents/Right/MASt3R-SLAM/temp/init/depth_{mast3r_inference_mono.counter}_{i}.png", depth_color_uint8)
+        print(f'Successfully saved depth_mono_{mast3r_inference_mono.counter}_{i}.png')
+    mast3r_inference_mono.counter += 1 
 
     return Xii, Cii
 
@@ -182,6 +199,9 @@ def mast3r_match_symmetric(model, feat_i, pos_i, feat_j, pos_j, shape_i, shape_j
 
 @torch.inference_mode
 def mast3r_asymmetric_inference(model, frame_i, frame_j):
+    if not hasattr(mast3r_asymmetric_inference, "counter"):
+        mast3r_asymmetric_inference.counter = 0
+        
     if frame_i.feat is None:
         frame_i.feat, frame_i.pos, _ = model._encode_image(
             frame_i.img, frame_i.img_true_shape
@@ -203,6 +223,18 @@ def mast3r_asymmetric_inference(model, frame_i, frame_j):
     # 4xhxwxc
     X, C, D, Q = torch.stack(X), torch.stack(C), torch.stack(D), torch.stack(Q)
     X, C, D, Q = downsample(X, C, D, Q)
+
+    depth_map = X[..., 2]
+    depth_map_np = depth_map.detach().cpu().numpy()
+    for i in range(depth_map_np.shape[0]):
+        depth_min = np.min(depth_map_np[i])
+        depth_max = np.max(depth_map_np[i])
+        depth_norm = (depth_map_np[i] - depth_min) / (depth_max - depth_min + 1e-8)
+        depth_color = plt.cm.jet(depth_norm)[:, :, :3]
+        depth_color_uint8 = (depth_color * 255).astype(np.uint8)
+        imageio.imwrite(f"/home/pi/Documents/Right/MASt3R-SLAM/temp/infer/depth_{mast3r_asymmetric_inference.counter}_{i}.png", depth_color_uint8)
+        print(f'Successfully saved depth_infer_{mast3r_asymmetric_inference.counter}_{i}.png')
+    mast3r_asymmetric_inference.counter += 1 
     return X, C, D, Q
 
 
