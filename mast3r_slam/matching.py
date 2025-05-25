@@ -9,7 +9,6 @@ def match(X11, X21, D11, D21, idx_1_to_2_init=None):
     idx_1_to_2, valid_match2 = match_iterative_proj(X11, X21, D11, D21, idx_1_to_2_init)
     return idx_1_to_2, valid_match2
 
-
 def pixel_to_lin(p1, w):
     idx_1_to_2 = p1[..., 0] + (w * p1[..., 1])
     return idx_1_to_2

@@ -206,7 +206,7 @@ if __name__ == "__main__":
         sys.exit(0)
     K = None
     if use_calib:
-        K = torch.from_numpy(dataset.camera_intrinsics.K_frame).to(
+        K = torch.from_numpy(dataset.camera_intrinsics_left.K_frame).to(
             device, dtype=torch.float32
         )
         keyframes.set_intrinsics(K)
@@ -268,7 +268,51 @@ if __name__ == "__main__":
             )
             framepair = create_framepair(i, img_left, img_right, T_WC, img_size=dataset.img_size, device=device)
 
-            X_init, C_init = mast3r_inference_stereo(model, framepair)
+            if mode == Mode.INIT:
+                # Initialize via stereo inference, and encoded features need for database
+                X_init, C_init = mast3r_inference_stereo(model, framepair)
+                framepair.frame_left.update_pointmap(X_init, C_init)
+                keyframes.append(framepair.frame_left)
+                states.queue_global_optimization(len(keyframes) - 1)
+                states.set_mode(Mode.TRACKING)
+                states.set_frame(framepair.frame_left)
+                i += 1
+                continue
+
+            if mode == Mode.TRACKING:
+                add_new_kf, match_info, try_reloc = tracker.track(framepair.frame_left)
+                if try_reloc:
+                    states.set_mode(Mode.RELOC)
+                states.set_frame(framepair.frame_left)
+
+            elif mode == Mode.RELOC:
+                X, C = mast3r_inference_stereo(model, framepair)
+                framepair.frame_left.update_pointmap(X, C)
+                states.set_frame(framepair.frame_left)
+                states.queue_reloc()
+                # In single threaded mode, make sure relocalization happen for every frame
+                while config["single_thread"]:
+                    with states.lock:
+                        if states.reloc_sem.value == 0:
+                            break
+                    time.sleep(0.01)
+
+            else:
+                raise Exception("Invalid mode")
+
+            if add_new_kf:
+                keyframes.append(framepair.frame_left)
+                states.queue_global_optimization(len(keyframes) - 1)
+                # In single threaded mode, wait for the backend to finish
+                while config["single_thread"]:
+                    with states.lock:
+                        if len(states.global_optimizer_tasks) == 0:
+                            break
+                    time.sleep(0.01)
+            # log time
+            if i % 30 == 0:
+                FPS = i / (time.time() - fps_timer)
+                print(f"FPS: {FPS}")
             i += 1
 
         else:

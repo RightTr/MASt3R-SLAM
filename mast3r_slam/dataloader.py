@@ -73,7 +73,8 @@ class StereoDataset(torch.utils.data.Dataset):
         self.rgb_files_right = []
         self.timestamps = []
         self.img_size = 512
-        self.camera_intrinsics = None
+        self.camera_intrinsics_left = None
+        self.camera_intrinsics_right = None
         self.use_calibration = config["use_calib"]
         self.save_results = False # TODO:Stereo datasets do not save results by default
 
@@ -101,13 +102,13 @@ class StereoDataset(torch.utils.data.Dataset):
     def get_image_left(self, idx):
         img = self.read_img_left(idx)
         if self.use_calibration:
-            img = self.camera_intrinsics.remap(img)
+            img = self.camera_intrinsics_left.remap(img)
         return img.astype(self.dtype) / 255.0
     
     def get_image_right(self, idx):
         img = self.read_img_right(idx)
         if self.use_calibration:
-            img = self.camera_intrinsics.remap(img)
+            img = self.camera_intrinsics_right.remap(img)
         return img.astype(self.dtype) / 255.0
 
     def get_img_shape(self):
@@ -125,7 +126,7 @@ class StereoDataset(torch.utils.data.Dataset):
         self.timestamps = self.timestamps[::subsample]
 
     def has_calib(self):
-        return self.camera_intrinsics is not None
+        return self.camera_intrinsics_left is not None and self.camera_intrinsics_right is not None
 
 class TUMDataset(MonocularDataset):
     def __init__(self, dataset_path):
@@ -325,11 +326,12 @@ class Nus822Dataset(StereoDataset):
         self.poses = []
         # self.poses = self.load_poses(os.path.join(self.dataset_path, "gt_thermal.txt"))
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files_left]
+        calib_left = np.array([358.009390, 356.631007, 320.649615, 268.477546, -0.210408, 0.037092, 0.000217, 0.000702, 0])
+        calib_right = np.array([358.484823, 357.311578, 317.492363, 267.103537, -0.212959, 0.039110, 0.000939, 0.001243, 0])
         
-        calib = np.array([471.96351324104091, 339.03066128694218, 472.48642748309049, 277.74073717116710, 
-                          -1.8566954779749040e-01, 1.6745260846914475e-01, -1.8122010952647307e-04, 8.6534037842673963e-05, -1.0770856460153226e-01])
         W, H = 640, 512
-        self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
+        self.camera_intrinsics_left = Intrinsics.from_calib(self.img_size, W, H, calib_left)
+        self.camera_intrinsics_right = Intrinsics.from_calib(self.img_size, W, H, calib_right)
 
 class EurocDataset(MonocularDataset):
     def __init__(self, dataset_path):
