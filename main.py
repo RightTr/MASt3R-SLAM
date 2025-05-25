@@ -13,11 +13,12 @@ from mast3r_slam.global_opt import FactorGraph
 from mast3r_slam.config import load_config, config, set_global_config
 from mast3r_slam.dataloader import Intrinsics, load_dataset
 import mast3r_slam.evaluate as eval
-from mast3r_slam.frame import Mode, SharedKeyframes, SharedStates, create_frame
+from mast3r_slam.frame import Mode, SharedKeyframes, SharedStates, create_frame, create_framepair
 from mast3r_slam.mast3r_utils import (
     load_mast3r,
     load_retriever,
     mast3r_inference_mono,
+    mast3r_inference_stereo,
 )
 from mast3r_slam.multiprocess_utils import new_queue, try_get_msg
 from mast3r_slam.tracker import FrameTracker
@@ -231,6 +232,8 @@ if __name__ == "__main__":
 
     frames = []
 
+    use_stereo = config["use_stereo"]
+
     while True:
         mode = states.get_mode()
         msg = try_get_msg(viz2main)
@@ -250,65 +253,84 @@ if __name__ == "__main__":
         if i == len(dataset):
             states.set_mode(Mode.TERMINATED)
             break
+        
+        if use_stereo:
+            timestamp, img_left, img_right = dataset[i]
 
-        timestamp, img = dataset[i]
-        if save_frames:
-            frames.append(img)
+            if save_frames:
+                frames.append([img_left, img_right])
 
-        # get frames last camera pose
-        T_WC = (
-            lietorch.Sim3.Identity(1, device=device)
-            if i == 0
-            else states.get_frame().T_WC
-        )
-        frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
+            # get frames last camera pose
+            T_WC = (
+                lietorch.Sim3.Identity(1, device=device)
+                if i == 0
+                else states.get_frame().T_WC
+            )
+            framepair = create_framepair(i, img_left, img_right, T_WC, img_size=dataset.img_size, device=device)
 
-        if mode == Mode.INIT:
-            # Initialize via mono inference, and encoded features neeed for database
-            X_init, C_init = mast3r_inference_mono(model, frame)
-            frame.update_pointmap(X_init, C_init)
-            keyframes.append(frame)
-            states.queue_global_optimization(len(keyframes) - 1)
-            states.set_mode(Mode.TRACKING)
-            states.set_frame(frame)
+            X_init, C_init = mast3r_inference_stereo(model, framepair)
             i += 1
-            continue
-
-        if mode == Mode.TRACKING:
-            add_new_kf, match_info, try_reloc = tracker.track(frame)
-            if try_reloc:
-                states.set_mode(Mode.RELOC)
-            states.set_frame(frame)
-
-        elif mode == Mode.RELOC:
-            X, C = mast3r_inference_mono(model, frame)
-            frame.update_pointmap(X, C)
-            states.set_frame(frame)
-            states.queue_reloc()
-            # In single threaded mode, make sure relocalization happen for every frame
-            while config["single_thread"]:
-                with states.lock:
-                    if states.reloc_sem.value == 0:
-                        break
-                time.sleep(0.01)
 
         else:
-            raise Exception("Invalid mode")
+            timestamp, img = dataset[i]
 
-        if add_new_kf:
-            keyframes.append(frame)
-            states.queue_global_optimization(len(keyframes) - 1)
-            # In single threaded mode, wait for the backend to finish
-            while config["single_thread"]:
-                with states.lock:
-                    if len(states.global_optimizer_tasks) == 0:
-                        break
-                time.sleep(0.01)
-        # log time
-        if i % 30 == 0:
-            FPS = i / (time.time() - fps_timer)
-            print(f"FPS: {FPS}")
-        i += 1
+            if save_frames:
+                frames.append(img)
+
+            # get frames last camera pose
+            T_WC = (
+                lietorch.Sim3.Identity(1, device=device)
+                if i == 0
+                else states.get_frame().T_WC
+            )
+            frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
+
+            if mode == Mode.INIT:
+                # Initialize via mono inference, and encoded features need for database
+                X_init, C_init = mast3r_inference_mono(model, frame)
+                frame.update_pointmap(X_init, C_init)
+                keyframes.append(frame)
+                states.queue_global_optimization(len(keyframes) - 1)
+                states.set_mode(Mode.TRACKING)
+                states.set_frame(frame)
+                i += 1
+                continue
+
+            if mode == Mode.TRACKING:
+                add_new_kf, match_info, try_reloc = tracker.track(frame)
+                if try_reloc:
+                    states.set_mode(Mode.RELOC)
+                states.set_frame(frame)
+
+            elif mode == Mode.RELOC:
+                X, C = mast3r_inference_mono(model, frame)
+                frame.update_pointmap(X, C)
+                states.set_frame(frame)
+                states.queue_reloc()
+                # In single threaded mode, make sure relocalization happen for every frame
+                while config["single_thread"]:
+                    with states.lock:
+                        if states.reloc_sem.value == 0:
+                            break
+                    time.sleep(0.01)
+
+            else:
+                raise Exception("Invalid mode")
+
+            if add_new_kf:
+                keyframes.append(frame)
+                states.queue_global_optimization(len(keyframes) - 1)
+                # In single threaded mode, wait for the backend to finish
+                while config["single_thread"]:
+                    with states.lock:
+                        if len(states.global_optimizer_tasks) == 0:
+                            break
+                    time.sleep(0.01)
+            # log time
+            if i % 30 == 0:
+                FPS = i / (time.time() - fps_timer)
+                print(f"FPS: {FPS}")
+            i += 1
 
     if dataset.save_results:
         save_dir, seq_name = eval.prepare_savedir(args, dataset)

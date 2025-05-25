@@ -65,6 +65,67 @@ class MonocularDataset(torch.utils.data.Dataset):
 
     def has_calib(self):
         return self.camera_intrinsics is not None
+    
+class StereoDataset(torch.utils.data.Dataset):
+    def __init__(self, dtype=np.float32):
+        self.dtype = dtype
+        self.rgb_files_left = []
+        self.rgb_files_right = []
+        self.timestamps = []
+        self.img_size = 512
+        self.camera_intrinsics = None
+        self.use_calibration = config["use_calib"]
+        self.save_results = False # TODO:Stereo datasets do not save results by default
+
+    def __len__(self):
+        return len(self.rgb_files_left)
+
+    def __getitem__(self, idx):
+        # Call get_image before timestamp for realsense camera
+        img_left = self.get_image_left(idx)
+        img_right = self.get_image_right(idx)
+        timestamp = self.get_timestamp(idx)
+        return timestamp, img_left, img_right
+
+    def get_timestamp(self, idx):
+        return self.timestamps[idx]
+
+    def read_img_left(self, idx):
+        img = cv2.imread(self.rgb_files_left[idx])
+        return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    
+    def read_img_right(self, idx):
+        img = cv2.imread(self.rgb_files_right[idx])
+        return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    def get_image_left(self, idx):
+        img = self.read_img_left(idx)
+        if self.use_calibration:
+            img = self.camera_intrinsics.remap(img)
+        return img.astype(self.dtype) / 255.0
+    
+    def get_image_right(self, idx):
+        img = self.read_img_right(idx)
+        if self.use_calibration:
+            img = self.camera_intrinsics.remap(img)
+        return img.astype(self.dtype) / 255.0
+
+    def get_img_shape(self):
+        img_left = self.read_img_left(0)
+        img_right = self.read_img_right(0)
+        assert len(img_left) == len(img_right), "Left and right image sizes do not match!"
+        raw_img_shape = img_left.shape
+        img = resize_img(img_left, self.img_size)
+        # 3XHxW, HxWx3 -> HxW, HxW
+        return img["img"][0].shape[1:], raw_img_shape[:2]
+
+    def subsample(self, subsample):
+        self.rgb_files_left = self.rgb_files_left[::subsample]
+        self.rgb_files_right = self.rgb_files_right[::subsample]
+        self.timestamps = self.timestamps[::subsample]
+
+    def has_calib(self):
+        return self.camera_intrinsics is not None
 
 class TUMDataset(MonocularDataset):
     def __init__(self, dataset_path):
@@ -252,6 +313,23 @@ class NTU4DRadLMDataset(MonocularDataset):
             vec = np.array(list(map(float, line.split()))[1:8])
             poses.append(vec)
         return poses
+    
+class Nus822Dataset(StereoDataset):
+    def __init__(self, dataset_path):
+        super().__init__()
+        self.dataset_path = pathlib.Path(dataset_path)
+        self.rgb_files_left = sorted(glob.glob(os.path.join(self.dataset_path, "left/image/*.png")))
+        self.rgb_files_right = sorted(glob.glob(os.path.join(self.dataset_path, "right/image/*.png")))
+        assert len(self.rgb_files_left) == len(self.rgb_files_right), "Left and right image amounts do not match!"
+        self.n_img = len(self.rgb_files_left)
+        self.poses = []
+        # self.poses = self.load_poses(os.path.join(self.dataset_path, "gt_thermal.txt"))
+        self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files_left]
+        
+        calib = np.array([471.96351324104091, 339.03066128694218, 472.48642748309049, 277.74073717116710, 
+                          -1.8566954779749040e-01, 1.6745260846914475e-01, -1.8122010952647307e-04, 8.6534037842673963e-05, -1.0770856460153226e-01])
+        W, H = 640, 512
+        self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
 
 class EurocDataset(MonocularDataset):
     def __init__(self, dataset_path):
@@ -502,6 +580,8 @@ def load_dataset(dataset_path):
         return SmokeBasementDataset(dataset_path)
     if "NTU4DRadLM" in split_dataset_type:
         return NTU4DRadLMDataset(dataset_path)
+    if "nus822" in split_dataset_type:
+        return Nus822Dataset(dataset_path)
 
     ext = split_dataset_type[-1].split(".")[-1]
     if ext in ["mp4", "avi", "MOV", "mov"]:

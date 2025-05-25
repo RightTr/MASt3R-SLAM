@@ -155,6 +155,56 @@ def mast3r_inference_mono(model, frame):
 
     return Xii, Cii
 
+@torch.inference_mode
+def mast3r_inference_stereo(model, framepair):
+    if not hasattr(mast3r_inference_mono, "counter"):
+        mast3r_inference_mono.counter = 0
+
+    if framepair.frame_left.feat is None and framepair.frame_right.feat is None:
+        framepair.frame_left.feat, framepair.frame_left.pos, _ = model._encode_image(
+            framepair.frame_left.img, framepair.frame_left.img_true_shape)
+        framepair.frame_right.feat, framepair.frame_right.pos, _ = model._encode_image(
+            framepair.frame_right.img, framepair.frame_right.img_true_shape)
+
+    feat_left = framepair.frame_left.feat
+    pos_left = framepair.frame_left.pos
+    shape_left = framepair.frame_left.img_true_shape
+
+    feat_right = framepair.frame_right.feat
+    pos_right = framepair.frame_right.pos
+    shape_right = framepair.frame_right.img_true_shape
+
+    res11, res21 = decoder(model, feat_left, feat_right, pos_left, pos_right, shape_left, shape_right)
+    res = [res11, res21]
+    X, C, D, Q = zip(
+        *[(r["pts3d"][0], r["conf"][0], r["desc"][0], r["desc_conf"][0]) for r in res]
+    )
+    # 4xhxwxc
+    X, C, D, Q = torch.stack(X), torch.stack(C), torch.stack(D), torch.stack(Q)
+    X, C, D, Q = downsample(X, C, D, Q)
+
+    Xii, Xji = einops.rearrange(X, "b h w c -> b (h w) c")
+    Cii, Cji = einops.rearrange(C, "b h w -> b (h w) 1")
+
+    depth_map = X[..., 2]
+    depth_map_np = depth_map.detach().cpu().numpy()
+    for i in range(depth_map_np.shape[0]):
+        depth_min = np.min(depth_map_np[i])
+        depth_max = np.max(depth_map_np[i])
+        depth_norm = (depth_map_np[i] - depth_min) / (depth_max - depth_min + 1e-8)
+        depth_color = plt.cm.jet(depth_norm)[:, :, :3]
+        depth_color_uint8 = (depth_color * 255).astype(np.uint8)
+        if i == 0:
+            imageio.imwrite(f"/home/pi/Documents/Right/MASt3R-SLAM/temp/stereo/left/depth_{mast3r_inference_mono.counter}.png", 
+                            depth_color_uint8)
+        elif i == 1:
+            imageio.imwrite(f"/home/pi/Documents/Right/MASt3R-SLAM/temp/stereo/right/depth_{mast3r_inference_mono.counter}.png", 
+                            depth_color_uint8)
+        print(f'Successfully saved depth_mono_{mast3r_inference_mono.counter}.png')
+    mast3r_inference_mono.counter += 1
+
+    return Xii, Cii
+
 
 def mast3r_match_symmetric(model, feat_i, pos_i, feat_j, pos_j, shape_i, shape_j):
     X, C, D, Q = mast3r_decode_symmetric_batch(

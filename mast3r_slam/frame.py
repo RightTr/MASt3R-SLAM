@@ -107,6 +107,10 @@ class Frame:
     def get_average_conf(self):
         return self.C / self.N if self.C is not None else None
 
+@dataclasses.dataclass #TODO: FramePair
+class FramePair:
+    frame_left: Frame
+    frame_right: Frame
 
 def create_frame(i, img, T_WC, img_size=512, device="cuda:0"):
     img = resize_img(img, img_size)
@@ -121,6 +125,10 @@ def create_frame(i, img, T_WC, img_size=512, device="cuda:0"):
     frame = Frame(i, rgb, img_shape, img_true_shape, uimg, T_WC)
     return frame
 
+def create_framepair(i, img_left, img_right, T_WC, img_size=512, device="cuda:0"):
+    frame_left = create_frame(i, img_left, T_WC, img_size, device)
+    frame_right = create_frame(i, img_right, T_WC, img_size, device)
+    return FramePair(frame_left, frame_right)
 
 class SharedStates:
     def __init__(self, manager, h, w, dtype=torch.float32, device="cuda"):
