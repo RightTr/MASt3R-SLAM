@@ -201,14 +201,22 @@ if __name__ == "__main__":
     has_calib = dataset.has_calib()
     use_calib = config["use_calib"]
 
+    use_stereo = config["use_stereo"]
+
     if use_calib and not has_calib:
         print("[Warning] No calibration provided for this dataset!")
         sys.exit(0)
     K = None
     if use_calib:
-        K = torch.from_numpy(dataset.camera_intrinsics_left.K_frame).to(
+        if use_stereo:
+            K = torch.from_numpy(dataset.camera_intrinsics_left.K_frame).to(
             device, dtype=torch.float32
         )
+
+        else:
+            K = torch.from_numpy(dataset.camera_intrinsics.K_frame).to(
+                device, dtype=torch.float32
+            )
         keyframes.set_intrinsics(K)
 
     # remove the trajectory from the previous run
@@ -231,8 +239,6 @@ if __name__ == "__main__":
     fps_timer = time.time()
 
     frames = []
-
-    use_stereo = config["use_stereo"]
 
     while True:
         mode = states.get_mode()

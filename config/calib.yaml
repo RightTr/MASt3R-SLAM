@@ -1,5 +1,6 @@
 inherit: "config/base.yaml"
 
 use_calib: True
+use_stereo: False
 dataset:
   subsample: 2

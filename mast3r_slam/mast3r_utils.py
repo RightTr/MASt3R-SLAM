@@ -273,7 +273,7 @@ def mast3r_asymmetric_inference(model, frame_i, frame_j):
     # 4xhxwxc
     X, C, D, Q = torch.stack(X), torch.stack(C), torch.stack(D), torch.stack(Q)
     X, C, D, Q = downsample(X, C, D, Q)
-
+    
     depth_map = X[..., 2]
     depth_map_np = depth_map.detach().cpu().numpy()
     for i in range(depth_map_np.shape[0]):
