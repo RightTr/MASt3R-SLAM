@@ -11,6 +11,8 @@ from mast3r_slam.config import config
 import mast3r_slam.matching as matching
 import imageio
 import matplotlib.pyplot as plt
+from PIL import Image
+from PIL import ImageOps
 
 
 def load_mast3r(path=None, device="cuda"):
@@ -323,38 +325,65 @@ def _resize_pil_image(img, long_edge_size):
     return img.resize(new_size, interp)
 
 
-def resize_img(img, size, square_ok=False, return_transformation=False):
-    assert size == 224 or size == 512
-    # numpy to PIL format
-    img = PIL.Image.fromarray(np.uint8(img * 255))
-    W1, H1 = img.size
-    if size == 224:
-        # resize short side to 224 (then crop)
-        img = _resize_pil_image(img, round(size * max(W1 / H1, H1 / W1)))
-    else:
-        # resize long side to 512
-        img = _resize_pil_image(img, size)
-    W, H = img.size
-    cx, cy = W // 2, H // 2
-    if size == 224:
-        half = min(cx, cy)
-        img = img.crop((cx - half, cy - half, cx + half, cy + half))
-    else:
-        halfw, halfh = ((2 * cx) // 16) * 8, ((2 * cy) // 16) * 8
-        if not (square_ok) and W == H:
-            halfh = 3 * halfw / 4
-        img = img.crop((cx - halfw, cy - halfh, cx + halfw, cy + halfh))
+def resize_img(img, size, square_ok=False, return_transformation=False, mode="crop"): #TODO: Resize correctly?
+    if mode not in ["crop", "pad"]:
+        raise ValueError("Mode must be either 'crop' or 'pad'")
+    
+    target_size = 518
+    img = (img * 255).clip(0, 255).astype(np.uint8)
+    img = Image.fromarray(img)
+    height0, width0 = img.size
+
+    if mode == "pad":
+        # Make the largest dimension 518px while maintaining aspect ratio
+        if width0 >= height0:
+            new_width = target_size
+            new_height = round(height0 * (new_width / width0) / 14) * 14  # Make divisible by 14
+        else:
+            new_height = target_size
+            new_width = round(width0 * (new_height / height0) / 14) * 14  # Make divisible by 14
+    else:  # mode == "crop"
+        # Original behavior: set width to 518px
+        new_width = target_size
+        # Calculate height maintaining aspect ratio, divisible by 14
+        new_height = round(height0 * (new_width / width0) / 14) * 14
+
+    # Resize with new dimensions (width, height)
+    img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
+    height, width = img.size
+
+    # Center crop height if it's larger than 518 (only in crop mode)
+    if mode == "crop" and new_height > target_size:
+        start_y = (new_height - target_size) // 2
+        img = img.crop((0, start_y, width, start_y + target_size))
+
+    # For pad mode, pad to make a square of target_size x target_size
+    if mode == "pad":
+        h_padding = target_size - img.shape[1]
+        w_padding = target_size - img.shape[2]
+
+        if h_padding > 0 or w_padding > 0:
+            pad_top = h_padding // 2
+            pad_bottom = h_padding - pad_top
+            pad_left = w_padding // 2
+            pad_right = w_padding - pad_left
+
+            # Pad with white (value=1.0)
+            img = ImageOps.expand(img, border=(pad_left, pad_top, pad_right, pad_bottom), fill=255)
 
     res = dict(
         img=ImgNorm(img)[None],
         true_shape=np.int32([img.size[::-1]]),
         unnormalized_img=np.asarray(img),
     )
-    if return_transformation:
-        scale_w = W1 / W
-        scale_h = H1 / H
-        half_crop_w = (W - img.size[0]) / 2
-        half_crop_h = (H - img.size[1]) / 2
-        return res, (scale_w, scale_h, half_crop_w, half_crop_h)
 
+    if return_transformation:
+        scale_w = width0 / width 
+        scale_h = height0 / height
+        half_crop_w = (width - img.size[0]) / 2
+        half_crop_h = (height - img.size[1]) / 2
+        return res, (scale_w, scale_h, half_crop_w, half_crop_h)
+    
     return res
+
+

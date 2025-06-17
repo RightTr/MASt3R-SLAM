@@ -22,7 +22,8 @@ from mast3r_slam.mast3r_utils import (
 )
 from mast3r_slam.vggt_utils import (
     load_vggt,
-    vggt_inference_mono
+    vggt_inference_mono,
+    vggt_asymmetric_inference
 )
 from mast3r_slam.multiprocess_utils import new_queue, try_get_msg
 from mast3r_slam.tracker import FrameTracker
@@ -206,126 +207,125 @@ if __name__ == "__main__":
     use_calib = config["use_calib"]
 
 
-    while(True):
-        img = dataset[i]
-        T_WC = (
-        lietorch.Sim3.Identity(1, device=device)
-        if i == 0
-        else states.get_frame().T_WC)
+    # i = 0
+
+    # while(True):
+    #     _, img = dataset[i]
+    #     T_WC = (
+    #     lietorch.Sim3.Identity(1, device=device)
+    #     if i == 0
+    #     else states.get_frame().T_WC)
         
-        frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
-        _, _ = vggt_inference_mono(model, frame)
-        i += 1
-    # if use_calib and not has_calib:
-    #     print("[Warning] No calibration provided for this dataset!")
-    #     sys.exit(0)
-    # K = None
-    # if use_calib:
-    #     K = torch.from_numpy(dataset.camera_intrinsics.K_frame).to(
-    #         device, dtype=torch.float32
-    #     )
-    #     keyframes.set_intrinsics(K)
+    #     frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
+    #     _, _ = vggt_inference_mono(model, frame)
+    #     i += 1
+    if use_calib and not has_calib:
+        print("[Warning] No calibration provided for this dataset!")
+        sys.exit(0)
+    K = None
+    if use_calib:
+        K = torch.from_numpy(dataset.camera_intrinsics.K_frame).to(
+            device, dtype=torch.float32
+        )
+        keyframes.set_intrinsics(K)
 
-    # # remove the trajectory from the previous run
-    # if dataset.save_results:
-    #     save_dir, seq_name = eval.prepare_savedir(args, dataset)
-    #     traj_file = save_dir / f"{seq_name}.txt"
-    #     recon_file = save_dir / f"{seq_name}.ply"
-    #     if traj_file.exists():
-    #         traj_file.unlink()
-    #     if recon_file.exists():
-    #         recon_file.unlink()
+    # remove the trajectory from the previous run
+    if dataset.save_results:
+        save_dir, seq_name = eval.prepare_savedir(args, dataset)
+        traj_file = save_dir / f"{seq_name}.txt"
+        recon_file = save_dir / f"{seq_name}.ply"
+        if traj_file.exists():
+            traj_file.unlink()
+        if recon_file.exists():
+            recon_file.unlink()
 
-    # tracker = FrameTracker(model, keyframes, device)
-    # last_msg = WindowMsg()
+    tracker = FrameTracker(model, keyframes, device)
+    last_msg = WindowMsg()
 
     # backend = mp.Process(target=run_backend, args=(config, model, states, keyframes, K))
     # backend.start()
 
-    # i = 0
-    # fps_timer = time.time()
+    i = 0
+    fps_timer = time.time()
 
-    # frames = []
+    frames = []
 
-    # while True:
-    #     mode = states.get_mode()
-    #     msg = try_get_msg(viz2main)
-    #     last_msg = msg if msg is not None else last_msg
-    #     if last_msg.is_terminated:
-    #         states.set_mode(Mode.TERMINATED)
-    #         break
+    while True:
+        mode = states.get_mode()
+        msg = try_get_msg(viz2main)
+        last_msg = msg if msg is not None else last_msg
+        if last_msg.is_terminated:
+            states.set_mode(Mode.TERMINATED)
+            break
 
-    #     if last_msg.is_paused and not last_msg.next:
-    #         states.pause()
-    #         time.sleep(0.01)
-    #         continue
+        if last_msg.is_paused and not last_msg.next:
+            states.pause()
+            time.sleep(0.01)
+            continue
 
-    #     if not last_msg.is_paused:
-    #         states.unpause()
+        if not last_msg.is_paused:
+            states.unpause()
 
-    #     if i == len(dataset):
-    #         states.set_mode(Mode.TERMINATED)
-    #         break
+        if i == len(dataset):
+            states.set_mode(Mode.TERMINATED)
+            break
 
-    #     timestamp, img = dataset[i]
+        timestamp, img = dataset[i]
 
-    #     if save_frames:
-    #         frames.append(img)
+        # get frames last camera pose
+        T_WC = (
+            lietorch.Sim3.Identity(1, device=device)
+            if i == 0
+            else states.get_frame().T_WC
+        )
+        frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
 
-    #     # get frames last camera pose
-    #     T_WC = (
-    #         lietorch.Sim3.Identity(1, device=device)
-    #         if i == 0
-    #         else states.get_frame().T_WC
-    #     )
-    #     frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
+        if mode == Mode.INIT:
+            # Initialize via mono inference, and encoded features need for database
+            X_init, C_init = vggt_inference_mono(model, frame)
+            frame.update_pointmap(X_init, C_init)
+            keyframes.append(frame)
+            states.queue_global_optimization(len(keyframes) - 1)
+            states.set_mode(Mode.TRACKING)
+            states.set_frame(frame)
+            i += 1
+            continue
 
-    #     if mode == Mode.INIT:
-    #         # Initialize via mono inference, and encoded features need for database
-    #         X_init, C_init = mast3r_inference_mono(model, frame)
-    #         frame.update_pointmap(X_init, C_init)
-    #         keyframes.append(frame)
-    #         states.queue_global_optimization(len(keyframes) - 1)
-    #         states.set_mode(Mode.TRACKING)
-    #         states.set_frame(frame)
-    #         i += 1
-    #         continue
+        # if mode == Mode.TRACKING:
+        #     add_new_kf, match_info, try_reloc = tracker.track(frame)
+        #     if try_reloc:
+        #         states.set_mode(Mode.RELOC)
+        #     states.set_frame(frame)
 
-    #     if mode == Mode.TRACKING:
-    #         add_new_kf, match_info, try_reloc = tracker.track(frame)
-    #         if try_reloc:
-    #             states.set_mode(Mode.RELOC)
-    #         states.set_frame(frame)
+        # elif mode == Mode.RELOC:
+        #     X, C = mast3r_inference_mono(model, frame)
+        #     frame.update_pointmap(X, C)
+        #     states.set_frame(frame)
+        #     states.queue_reloc()
+        #     # In single threaded mode, make sure relocalization happen for every frame
+        #     while config["single_thread"]:
+        #         with states.lock:
+        #             if states.reloc_sem.value == 0:
+        #                 break
+        #         time.sleep(0.01)
 
-    #     elif mode == Mode.RELOC:
-    #         X, C = mast3r_inference_mono(model, frame)
-    #         frame.update_pointmap(X, C)
-    #         states.set_frame(frame)
-    #         states.queue_reloc()
-    #         # In single threaded mode, make sure relocalization happen for every frame
-    #         while config["single_thread"]:
-    #             with states.lock:
-    #                 if states.reloc_sem.value == 0:
-    #                     break
-    #             time.sleep(0.01)
+        # else:
+        #     raise Exception("Invalid mode")
 
-    #     else:
-    #         raise Exception("Invalid mode")
-
-    #     if add_new_kf:
-    #         keyframes.append(frame)
-    #         states.queue_global_optimization(len(keyframes) - 1)
-    #         # In single threaded mode, wait for the backend to finish
-    #         while config["single_thread"]:
-    #             with states.lock:
-    #                 if len(states.global_optimizer_tasks) == 0:
-    #                     break
-    #             time.sleep(0.01)
-    #     # log time
-    #     if i % 30 == 0:
-    #         FPS = i / (time.time() - fps_timer)
-    #         print(f"FPS: {FPS}")
-    #     i += 1
+        # if add_new_kf:
+        #     keyframes.append(frame)
+        #     states.queue_global_optimization(len(keyframes) - 1)
+        #     # In single threaded mode, wait for the backend to finish
+        #     while config["single_thread"]:
+        #         with states.lock:
+        #             if len(states.global_optimizer_tasks) == 0:
+        #                 break
+        #         time.sleep(0.01)
+        # # log time
+        # if i % 30 == 0:
+        #     FPS = i / (time.time() - fps_timer)
+        #     print(f"FPS: {FPS}")
+        # i += 1
 
     # if dataset.save_results:
     #     save_dir, seq_name = eval.prepare_savedir(args, dataset)
@@ -341,15 +341,7 @@ if __name__ == "__main__":
     #     )
     #     eval.evaluate(save_dir, dataset.poses, keyframes)
 
-    # if save_frames:
-    #     savedir = pathlib.Path(f"logs/frames/{datetime_now}")
-    #     savedir.mkdir(exist_ok=True, parents=True)
-    #     for i, frame in tqdm.tqdm(enumerate(frames), total=len(frames)):
-    #         frame = (frame * 255).clip(0, 255)
-    #         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-    #         cv2.imwrite(f"{savedir}/{i}.png", frame)
-
-    # print("done")
+    print("done")
     # backend.join()
-    # if not args.no_viz:
-    #     viz.join()
+    if not args.no_viz:
+        viz.join()

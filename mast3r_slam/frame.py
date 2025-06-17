@@ -24,6 +24,8 @@ class Frame:
     T_WC: lietorch.Sim3 = lietorch.Sim3.Identity(1)
     X_canon: Optional[torch.Tensor] = None
     C: Optional[torch.Tensor] = None
+    feat: Optional[torch.Tensor] = None
+    pos: Optional[torch.Tensor] = None
     N: int = 0
     N_updates: int = 0
     K: Optional[torch.Tensor] = None
