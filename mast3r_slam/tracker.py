@@ -10,6 +10,7 @@ from mast3r_slam.geometry import (
 from mast3r_slam.nonlinear_optimizer import check_convergence, huber
 from mast3r_slam.config import config
 from mast3r_slam.mast3r_utils import mast3r_match_asymmetric
+from mast3r_slam.vggt_utils import vggt_asymmetric_inference
 
 
 class FrameTracker:
@@ -27,18 +28,12 @@ class FrameTracker:
 
     def track(self, frame: Frame):
         keyframe = self.keyframes.last_keyframe()
+        
+        Pkf, Xff, Xkf, Cff, Ckf = vggt_asymmetric_inference(self.model, frame, keyframe)
 
         idx_f2k, valid_match_k, Xff, Cff, Qff, Xkf, Ckf, Qkf = mast3r_match_asymmetric(
             self.model, frame, keyframe, idx_i2j_init=self.idx_f2k
         )
-        # Save idx for next
-        self.idx_f2k = idx_f2k.clone()
-
-        # Get rid of batch dim
-        idx_f2k = idx_f2k[0]
-        valid_match_k = valid_match_k[0]
-
-        Qk = torch.sqrt(Qff[idx_f2k] * Qkf)
 
         # Update keyframe pointmap after registration (need pose)
         frame.update_pointmap(Xff, Cff)
@@ -50,68 +45,14 @@ class FrameTracker:
         else:
             K = None
 
-        # Get poses and point correspondneces and confidences
-        Xf, Xk, T_WCf, T_WCk, Cf, Ck, meas_k, valid_meas_k = self.get_points_poses(
-            frame, keyframe, idx_f2k, img_size, use_calib, K
-        )
+        T_WCk = keyframe.T_WC
+        
+        frame.T_WC = Pkf * T_WCk
 
-        # Get valid
-        # Use canonical confidence average
-        valid_Cf = Cf > self.cfg["C_conf"]
-        valid_Ck = Ck > self.cfg["C_conf"]
-        valid_Q = Qk > self.cfg["Q_conf"]
-
-        valid_opt = valid_match_k & valid_Cf & valid_Ck & valid_Q
-        valid_kf = valid_match_k & valid_Q
-
-        match_frac = valid_opt.sum() / valid_opt.numel()
-        if match_frac < self.cfg["min_match_frac"]:
-            print(f"Skipped frame {frame.frame_id}")
-            return False, [], True
-
-        try:
-            # Track
-            if not use_calib:
-                T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3(
-                    Xf, Xk, T_WCf, T_WCk, Qk, valid_opt
-                )
-            else:
-                T_WCf, T_CkCf = self.opt_pose_calib_sim3(
-                    Xf,
-                    Xk,
-                    T_WCf,
-                    T_WCk,
-                    Qk,
-                    valid_opt,
-                    meas_k,
-                    valid_meas_k,
-                    K,
-                    img_size,
-                )
-        except Exception as e:
-            print(f"Cholesky failed {frame.frame_id}")
-            return False, [], True
-
-        frame.T_WC = T_WCf
-
-        # Use pose to transform points to update keyframe
-        Xkk = T_CkCf.act(Xkf)
+        Xkk = Pkf.act(Xkf)
         keyframe.update_pointmap(Xkk, Ckf)
-        # write back the fitered pointmap
+
         self.keyframes[len(self.keyframes) - 1] = keyframe
-
-        # Keyframe selection
-        n_valid = valid_kf.sum()
-        match_frac_k = n_valid / valid_kf.numel()
-        unique_frac_f = (
-            torch.unique(idx_f2k[valid_match_k[:, 0]]).shape[0] / valid_kf.numel()
-        )
-
-        new_kf = min(match_frac_k, unique_frac_f) < self.cfg["match_frac_thresh"]
-
-        # Rest idx if new keyframe
-        if new_kf:
-            self.reset_idx_f2k()
 
         return (
             new_kf,
@@ -120,10 +61,30 @@ class FrameTracker:
                 keyframe.get_average_conf(),
                 frame.X_canon,
                 frame.get_average_conf(),
-                Qkf,
-                Qff,
             ],
             False,
+        )
+        
+    def track_nk(self, frame_i: Frame, frame_j: Frame):
+        
+        Pij, Xii, Xij, Cii, Cij = vggt_asymmetric_inference(self.model, frame_i, frame_j)
+
+        frame_i.update_pointmap(Xii, Cii)
+
+        T_WCi = frame_i.T_WC
+        
+        frame_j.T_WC = Pij * T_WCi
+
+        Xjj = Pij.act(Xij)
+        frame_j.update_pointmap(Xjj, Cij)
+        
+        return (
+            [
+                frame_i.X_canon,
+                frame_i.get_average_conf(),
+                frame_j.X_canon,
+                frame_j.get_average_conf(),
+            ],
         )
 
     def get_points_poses(self, frame, keyframe, idx_f2k, img_size, use_calib, K=None):

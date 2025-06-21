@@ -203,52 +203,11 @@ if __name__ == "__main__":
     model = load_vggt(device=device)
     model.share_memory()
 
-    has_calib = dataset.has_calib()
-    use_calib = config["use_calib"]
-
-
-    # i = 0
-
-    # while(True):
-    #     _, img = dataset[i]
-    #     T_WC = (
-    #     lietorch.Sim3.Identity(1, device=device)
-    #     if i == 0
-    #     else states.get_frame().T_WC)
-        
-    #     frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
-    #     _, _ = vggt_inference_mono(model, frame)
-    #     i += 1
-    if use_calib and not has_calib:
-        print("[Warning] No calibration provided for this dataset!")
-        sys.exit(0)
-    K = None
-    if use_calib:
-        K = torch.from_numpy(dataset.camera_intrinsics.K_frame).to(
-            device, dtype=torch.float32
-        )
-        keyframes.set_intrinsics(K)
-
-    # remove the trajectory from the previous run
-    if dataset.save_results:
-        save_dir, seq_name = eval.prepare_savedir(args, dataset)
-        traj_file = save_dir / f"{seq_name}.txt"
-        recon_file = save_dir / f"{seq_name}.ply"
-        if traj_file.exists():
-            traj_file.unlink()
-        if recon_file.exists():
-            recon_file.unlink()
 
     tracker = FrameTracker(model, keyframes, device)
     last_msg = WindowMsg()
 
-    # backend = mp.Process(target=run_backend, args=(config, model, states, keyframes, K))
-    # backend.start()
-
     i = 0
-    fps_timer = time.time()
-
-    frames = []
 
     while True:
         mode = states.get_mode()
@@ -284,18 +243,17 @@ if __name__ == "__main__":
             # Initialize via mono inference, and encoded features need for database
             X_init, C_init = vggt_inference_mono(model, frame)
             frame.update_pointmap(X_init, C_init)
-            keyframes.append(frame)
-            states.queue_global_optimization(len(keyframes) - 1)
             states.set_mode(Mode.TRACKING)
             states.set_frame(frame)
             i += 1
             continue
 
-        # if mode == Mode.TRACKING:
-        #     add_new_kf, match_info, try_reloc = tracker.track(frame)
-        #     if try_reloc:
-        #         states.set_mode(Mode.RELOC)
-        #     states.set_frame(frame)
+        if mode == Mode.TRACKING:
+            match_info = tracker.track_nk(frame_last, frame)
+            states.set_frame(frame)
+            
+        frame_last = frame
+        
 
         # elif mode == Mode.RELOC:
         #     X, C = mast3r_inference_mono(model, frame)

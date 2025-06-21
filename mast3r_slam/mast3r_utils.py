@@ -253,7 +253,7 @@ def mast3r_match_symmetric(model, feat_i, pos_i, feat_j, pos_j, shape_i, shape_j
 def mast3r_asymmetric_inference(model, frame_i, frame_j):
     if not hasattr(mast3r_asymmetric_inference, "counter"):
         mast3r_asymmetric_inference.counter = 0
-        
+        mast3r_match_asymmetric
     if frame_i.feat is None:
         frame_i.feat, frame_i.pos, _ = model._encode_image(
             frame_i.img, frame_i.img_true_shape
