@@ -77,7 +77,7 @@ class FrameTracker:
             False,
         )
         
-    def track_nk(self, frame_i: Frame, frame_j: Frame):
+    def track_nk(self, frame_i: Frame, frame_j: Frame): # Track with no keyframe
         Pij, Xii, Xij, Cii, Cij = vggt_asymmetric_inference(self.model, frame_i, frame_j)
         
         img_size = frame_i.img.shape[-2:]
@@ -92,7 +92,9 @@ class FrameTracker:
         
         frame_j.T_WC = T_WCiCj * T_WCi
 
-        Xjj = T_WCiCj.act(Xij) # TODO: dimension check
+        print(frame_j.T_WC.data.shape)
+
+        Xjj = T_WCiCj.act(Xij) 
         frame_j.update_pointmap(Xjj, Cij)
         
         return (

@@ -32,10 +32,10 @@ def vggt_inference_mono(model, frame):
     X, C = model.point_head(
                     aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
                 )
-    Xii = einops.rearrange(X.squeeze(1), "b h w c -> b (h w) c")
-    Cii = einops.rearrange(C.squeeze(1), "b h w -> b (h w) 1")
+    Xii = einops.rearrange(X[0, 0], "h w c -> (h w) c")
+    Cii = einops.rearrange(C[0, 0], "h w -> (h w) 1")
 
-    return Xii, Cii
+    return Xii.squeeze(0), Cii.squeeze(0)
     
 @torch.inference_mode
 def vggt_asymmetric_inference(model, frame_i, frame_j):
@@ -45,10 +45,10 @@ def vggt_asymmetric_inference(model, frame_i, frame_j):
     X, C = model.point_head(
                     aggregated_tokens_list, imgs, patch_start_idx=patch_start_idx
                 )
-    Xii = einops.rearrange(X[:, 0], "b h w c -> b (h w) c")
-    Xij = einops.rearrange(X[:, 1], "b h w c -> b (h w) c")
-    Cii = einops.rearrange(C[:, 0], "b h w -> b (h w) 1")
-    Cij = einops.rearrange(C[:, 1], "b h w -> b (h w) 1")
+    Xii = einops.rearrange(X[0, 0], "h w c -> (h w) c")
+    Xij = einops.rearrange(X[0, 1], "h w c -> (h w) c")
+    Cii = einops.rearrange(C[0, 0], "h w -> (h w) 1")
+    Cij = einops.rearrange(C[0, 1], "h w -> (h w) 1")
 
     return Pij, Xii, Xij, Cii, Cij
 
