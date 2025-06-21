@@ -171,8 +171,8 @@ class SharedStates:
             self.T_WC[:] = frame.T_WC.data
             self.X[:] = frame.X_canon
             self.C[:] = frame.C
-            self.feat[:] = frame.feat
-            self.pos[:] = frame.pos
+            # self.feat[:] = frame.feat
+            # self.pos[:] = frame.pos
 
     def get_frame(self):
         with self.lock:

@@ -10,7 +10,19 @@ from mast3r_slam.geometry import (
 from mast3r_slam.nonlinear_optimizer import check_convergence, huber
 from mast3r_slam.config import config
 from mast3r_slam.mast3r_utils import mast3r_match_asymmetric
-from mast3r_slam.vggt_utils import vggt_asymmetric_inference
+from mast3r_slam.vggt_utils import vggt_asymmetric_inference, closed_form_inverse_sim3
+
+import sys
+import os.path as path
+HERE_PATH = path.normpath(path.dirname(__file__))
+VGGT_REPO_PATH = path.normpath(path.join(HERE_PATH, '../thirdparty/vggt'))
+VGGT_LIB_PATH = path.join(VGGT_REPO_PATH, 'vggt')
+if path.isdir(VGGT_LIB_PATH):
+    sys.path.insert(0, VGGT_REPO_PATH)
+else:
+    raise ImportError(f"vggt is not initialized, could not find: {VGGT_LIB_PATH}.\n ")
+
+from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
 
 class FrameTracker:
@@ -66,16 +78,21 @@ class FrameTracker:
         )
         
     def track_nk(self, frame_i: Frame, frame_j: Frame):
-        
         Pij, Xii, Xij, Cii, Cij = vggt_asymmetric_inference(self.model, frame_i, frame_j)
+        
+        img_size = frame_i.img.shape[-2:]
 
         frame_i.update_pointmap(Xii, Cii)
 
         T_WCi = frame_i.T_WC
-        
-        frame_j.T_WC = Pij * T_WCi
 
-        Xjj = Pij.act(Xij)
+        extrinsics, _ = pose_encoding_to_extri_intri(Pij, img_size)
+
+        T_WCiCj = closed_form_inverse_sim3(extrinsics[:, 1])
+        
+        frame_j.T_WC = T_WCiCj * T_WCi
+
+        Xjj = T_WCiCj.act(Xij) # TODO: dimension check
         frame_j.update_pointmap(Xjj, Cij)
         
         return (

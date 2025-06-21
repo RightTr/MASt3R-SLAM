@@ -171,8 +171,8 @@ if __name__ == "__main__":
     print(config)
 
     manager = mp.Manager()
-    main2viz = new_queue(manager, args.no_viz)
-    viz2main = new_queue(manager, args.no_viz)
+    # main2viz = new_queue(manager, args.no_viz)
+    # viz2main = new_queue(manager, args.no_viz)
 
     dataset = load_dataset(args.dataset)
     dataset.subsample(config["dataset"]["subsample"])
@@ -193,12 +193,12 @@ if __name__ == "__main__":
     keyframes = SharedKeyframes(manager, h, w)
     states = SharedStates(manager, h, w)
 
-    if not args.no_viz:
-        viz = mp.Process(
-            target=run_visualization,
-            args=(config, states, keyframes, main2viz, viz2main),
-        )
-        viz.start()
+    # if not args.no_viz:
+    #     viz = mp.Process(
+    #         target=run_visualization,
+    #         args=(config, states, keyframes, main2viz, viz2main),
+    #     )
+    #     viz.start()
 
     model = load_vggt(device=device)
     model.share_memory()
@@ -211,8 +211,8 @@ if __name__ == "__main__":
 
     while True:
         mode = states.get_mode()
-        msg = try_get_msg(viz2main)
-        last_msg = msg if msg is not None else last_msg
+        # msg = try_get_msg(viz2main)
+        # last_msg = msg if msg is not None else last_msg
         if last_msg.is_terminated:
             states.set_mode(Mode.TERMINATED)
             break
@@ -238,9 +238,9 @@ if __name__ == "__main__":
             else states.get_frame().T_WC
         )
         frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
+        frame_last = frame
 
         if mode == Mode.INIT:
-            # Initialize via mono inference, and encoded features need for database
             X_init, C_init = vggt_inference_mono(model, frame)
             frame.update_pointmap(X_init, C_init)
             states.set_mode(Mode.TRACKING)
@@ -252,7 +252,7 @@ if __name__ == "__main__":
             match_info = tracker.track_nk(frame_last, frame)
             states.set_frame(frame)
             
-        frame_last = frame
+        
         
 
         # elif mode == Mode.RELOC:
@@ -301,5 +301,5 @@ if __name__ == "__main__":
 
     print("done")
     # backend.join()
-    if not args.no_viz:
-        viz.join()
+    # if not args.no_viz:
+    #     viz.join()
