@@ -238,7 +238,9 @@ if __name__ == "__main__":
             else states.get_frame().T_WC
         )
         frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
-        frame_last = frame
+        if i != 0:
+            frame_last = create_frame(i-1, img, T_WC, img_size=dataset.img_size, device=device)
+
 
         if mode == Mode.INIT:
             X_init, C_init = vggt_inference_mono(model, frame)
@@ -249,8 +251,9 @@ if __name__ == "__main__":
             continue
 
         if mode == Mode.TRACKING:
-            match_info = tracker.track_nk(frame_last, frame)
+            _ = tracker.track_nk(frame_last, frame)
             states.set_frame(frame)
+
             
         
         
