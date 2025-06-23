@@ -96,7 +96,7 @@ class FrameTracker:
         print(frame_j.T_WC.data)
 
         T_CjCi = T_CiCj.inv()
-        Xjj = T_CjCi.act(Xij)
+        Xjj = T_CjCi.act(Xij) # ???
         frame_j.update_pointmap(Xjj, Cij)
         
         return (

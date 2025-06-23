@@ -73,5 +73,5 @@ def closed_form_sim3(se3, scale = 1.0, R=None, t=None):
 
     t = t.squeeze(-1)
     scale = torch.full((se3.shape[0], 1), scale, dtype=se3.dtype, device=se3.device)
-    
-    return lietorch.Sim3(torch.cat([t, quats[:, 1:], quats[:, 0:1], scale], dim=-1))
+
+    return lietorch.Sim3(torch.cat([t, quats, scale], dim=-1))

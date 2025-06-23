@@ -253,6 +253,7 @@ if __name__ == "__main__":
         if mode == Mode.TRACKING:
             _ = tracker.track_nk(frame_last, frame)
             states.set_frame(frame)
+            i += 1
 
             
         
