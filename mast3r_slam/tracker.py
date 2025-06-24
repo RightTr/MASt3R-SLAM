@@ -10,7 +10,7 @@ from mast3r_slam.geometry import (
 from mast3r_slam.nonlinear_optimizer import check_convergence, huber
 from mast3r_slam.config import config
 from mast3r_slam.mast3r_utils import mast3r_match_asymmetric
-from mast3r_slam.vggt_utils import vggt_asymmetric_inference, closed_form_sim3
+from mast3r_slam.vggt_utils import vggt_match_asymmetric
 
 import sys
 import os.path as path
@@ -41,7 +41,7 @@ class FrameTracker:
     def track(self, frame: Frame):
         keyframe = self.keyframes.last_keyframe()
         
-        Pkf, Xff, Xkf, Cff, Ckf = vggt_asymmetric_inference(self.model, frame, keyframe)
+        Pkf, Xff, Xkf, Cff, Ckf = vggt_asymmetric_inference(frame, keyframe)
 
         idx_f2k, valid_match_k, Xff, Cff, Qff, Xkf, Ckf, Qkf = mast3r_match_asymmetric(
             self.model, frame, keyframe, idx_i2j_init=self.idx_f2k
@@ -78,18 +78,13 @@ class FrameTracker:
         )
         
     def track_nk(self, frame_i: Frame, frame_j: Frame): # Track with no keyframe
-        P, Xii, Xij, Cii, Cij = vggt_asymmetric_inference(self.model, frame_i, frame_j)
+        T_CiCj, Xii, Xij, Cii, Cij = vggt_match_asymmetric(self.model, frame_i, frame_j)
         
         img_size = frame_i.img.shape[-2:]
 
         frame_i.update_pointmap(Xii, Cii)
 
         T_WCi = frame_i.T_WC
-
-        # TODO: Is transformation correctly?
-        extrinsics, _ = pose_encoding_to_extri_intri(P, img_size) 
-
-        T_CiCj = closed_form_sim3(extrinsics[:, 1]) 
         
         frame_j.T_WC = T_WCi * T_CiCj
 

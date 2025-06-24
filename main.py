@@ -23,8 +23,8 @@ from mast3r_slam.mast3r_utils import (
 from mast3r_slam.vggt_utils import (
     load_vggt,
     vggt_inference_mono,
-    vggt_asymmetric_inference
-)
+    vggt_match_asymmetric
+    )
 from mast3r_slam.multiprocess_utils import new_queue, try_get_msg
 from mast3r_slam.tracker import FrameTracker
 from mast3r_slam.visualization import WindowMsg, run_visualization
@@ -200,10 +200,8 @@ if __name__ == "__main__":
     #     )
     #     viz.start()
 
-    model = load_vggt(device=device)
-    model.share_memory()
 
-
+    model = load_vggt(device=device)                                 
     tracker = FrameTracker(model, keyframes, device)
     last_msg = WindowMsg()
 
@@ -246,13 +244,13 @@ if __name__ == "__main__":
             X_init, C_init = vggt_inference_mono(model, frame)
             frame.update_pointmap(X_init, C_init)
             states.set_mode(Mode.TRACKING)
-            states.set_frame(frame)
+            # states.set_frame(frame)
             i += 1
             continue
 
         if mode == Mode.TRACKING:
-            _ = tracker.track_nk(frame_last, frame)
-            states.set_frame(frame)
+            _ = vggt_match_asymmetric(model, frame_last, frame)
+            # states.set_frame(frame)
             i += 1
 
             
