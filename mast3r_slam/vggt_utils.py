@@ -19,6 +19,7 @@ from torchvision import transforms as TF
 import einops
 import lietorch
 from scipy.spatial.transform import Rotation as R_scipy
+import mast3r_slam.matching as matching
 
 class VGGT(nn.Module, PyTorchModelHubMixin):
     def __init__(self, img_size=518, patch_size=14, embed_dim=1024):
@@ -48,6 +49,8 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
     def vggt_inference_mono(self, frame):
         img = frame.img.unsqueeze(1)
         aggregated_tokens_list, patch_start_idx = self.aggregator(img)
+        if frame.feat is None:
+            frame.feat = self.feature_extractor(aggregated_tokens_list, frame.img.unsqueeze(1), patch_start_idx)
         X, C = self.point_head(
                         aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
                     )
@@ -61,9 +64,9 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
         imgs = torch.stack([frame_i.img, frame_j.img], dim=1)
         aggregated_tokens_list, patch_start_idx = self.aggregator(imgs)
         if frame_i.feat is None:
-            frame_i.feat = self.feature_extractor(aggregated_tokens_list, frame_i.img, patch_start_idx) # TODO: Dimension Check! 
+            frame_i.feat = self.feature_extractor(aggregated_tokens_list, frame_i.img.unsqueeze(1), patch_start_idx) # TODO: Dimension Check! 
         if frame_j.feat is None:
-            frame_j.feat = self.feature_extractor(aggregated_tokens_list, frame_j.img, patch_start_idx)
+            frame_j.feat = self.feature_extractor(aggregated_tokens_list, frame_j.img.unsqueeze(1), patch_start_idx)
         P = self.camera_head(aggregated_tokens_list)[-1]
         X, C = self.point_head(
                         aggregated_tokens_list, imgs, patch_start_idx=patch_start_idx
@@ -74,6 +77,21 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
         Cij = einops.rearrange(C[0, 1], "h w -> (h w) 1")
 
         return P, Xii, Xij, Cii, Cij
+    
+    def vggt_match_asymmetric(self, frame_i, frame_j, idx_i2j_init=None):
+        P, Xii, Xij, Cii, Cij = self.vggt_asymmetric_inference(frame_i, frame_j)
+
+        idx_i2j, valid_match_j = matching.mymatch_iterative_proj(
+            Xii, Xij, idx_1_to_2_init=idx_i2j_init
+        )
+
+        # # How rest of system expects it
+        # Xii, Xji = einops.rearrange(X, "b h w c -> b (h w) c")
+        # Cii, Cji = einops.rearrange(C, "b h w -> b (h w) 1")
+        # Dii, Dji = einops.rearrange(D, "b h w c -> b (h w) c")
+        # Qii, Qji = einops.rearrange(Q, "b h w -> b (h w) 1")
+
+        # return idx_i2j, valid_match_j, Xii, Cii, Qii, Xji, Cji, Qji
 
     def closed_form_sim3(se3, scale = 1.0, R=None, t=None):
         if se3.shape[-2:] == (3, 4):  # expand to 4x4 if needed
