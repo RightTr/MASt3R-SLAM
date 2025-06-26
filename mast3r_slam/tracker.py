@@ -9,7 +9,6 @@ from mast3r_slam.geometry import (
 )
 from mast3r_slam.nonlinear_optimizer import check_convergence, huber
 from mast3r_slam.config import config
-from mast3r_slam.mast3r_utils import mast3r_match_asymmetric
 from mast3r_slam.vggt_utils import vggt_match_asymmetric
 
 import sys
@@ -41,30 +40,83 @@ class FrameTracker:
     def track(self, frame: Frame):
         keyframe = self.keyframes.last_keyframe()
         
-        Pkf, Xff, Xkf, Cff, Ckf = vggt_asymmetric_inference(frame, keyframe)
+        idx_f2k, valid_match_k, T_CkCf, Xff, Xkf, Cff, Ckf = vggt_match_asymmetric(
+            self.model, keyframe, frame, self.idx_f2k)
 
-        idx_f2k, valid_match_k, Xff, Cff, Qff, Xkf, Ckf, Qkf = mast3r_match_asymmetric(
-            self.model, frame, keyframe, idx_i2j_init=self.idx_f2k
-        )
+        self.idx_f2k = idx_f2k.clone()
 
-        # Update keyframe pointmap after registration (need pose)
         frame.update_pointmap(Xff, Cff)
 
         use_calib = config["use_calib"]
         img_size = frame.img.shape[-2:]
+
         if use_calib:
             K = keyframe.K
         else:
             K = None
-
-        T_WCk = keyframe.T_WC
         
-        frame.T_WC = Pkf * T_WCk
+        Qk = torch.ones_like(Xk[..., 2:3]) 
+        print(Qk.shape)
 
-        Xkk = Pkf.act(Xkf)
+        Xf, Xk, T_WCk, Cf, Ck, meas_k, valid_meas_k = self.get_points_poses(
+            frame, keyframe, idx_f2k, img_size, use_calib, K
+        )
+
+        print(valid_match_k.shape)
+
+
+
+        T_WCf = T_WCk * T_CkCf
+
+        valid_Cf = Cf > self.cfg["C_conf"]
+        valid_Ck = Ck > self.cfg["C_conf"]
+
+        valid_opt = valid_match_k & valid_Cf & valid_Ck
+        valid_kf = valid_match_k
+
+        match_frac = valid_opt.sum() / valid_opt.numel()
+
+        # if match_frac < self.cfg["min_match_frac"]:
+        print(f"Skipped frame {frame.frame_id}")
+        # return False, [], True
+
+        if not use_calib:
+            T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3(
+                Xf, Xk, T_WCf, T_WCk, Qk, valid_opt
+            )
+        else:
+            T_WCf, T_CkCf = self.opt_pose_calib_sim3(
+                Xf,
+                Xk,
+                T_WCf,
+                T_WCk,
+                Qk,
+                valid_opt,
+                meas_k,
+                valid_meas_k,
+                K,
+                img_size,
+            )
+        
+        frame.T_WC = T_WCf
+
+        T_CfCk = T_CkCf.inv()
+        Xkk = T_CfCk.act(Xkf)
         keyframe.update_pointmap(Xkk, Ckf)
 
         self.keyframes[len(self.keyframes) - 1] = keyframe
+
+        n_valid = valid_kf.sum()
+        match_frac_k = n_valid / valid_kf.numel()
+        unique_frac_f = (
+            torch.unique(idx_f2k[valid_match_k[:, 0]]).shape[0] / valid_kf.numel()
+        )
+
+        new_kf = min(match_frac_k, unique_frac_f) < self.cfg["match_frac_thresh"]
+
+
+        if new_kf:
+            self.reset_idx_f2k()
 
         return (
             new_kf,
@@ -106,7 +158,6 @@ class FrameTracker:
     def get_points_poses(self, frame, keyframe, idx_f2k, img_size, use_calib, K=None):
         Xf = frame.X_canon
         Xk = keyframe.X_canon
-        T_WCf = frame.T_WC
         T_WCk = keyframe.T_WC
 
         # Average confidence
@@ -128,7 +179,7 @@ class FrameTracker:
             valid_meas_k = Xk[..., 2:3] > self.cfg["depth_eps"]
             meas_k[~valid_meas_k.repeat(1, 3)] = 0.0
 
-        return Xf[idx_f2k], Xk, T_WCf, T_WCk, Cf[idx_f2k], Ck, meas_k, valid_meas_k
+        return Xf[0][idx_f2k], Xk, T_WCk, Cf[0][idx_f2k], Ck, meas_k, valid_meas_k
 
     def solve(self, sqrt_info, r, J):
         whitened_r = sqrt_info * r
@@ -152,6 +203,8 @@ class FrameTracker:
         sqrt_info_ray = 1 / self.cfg["sigma_ray"] * valid * torch.sqrt(Qk)
         sqrt_info_dist = 1 / self.cfg["sigma_dist"] * valid * torch.sqrt(Qk)
         sqrt_info = torch.cat((sqrt_info_ray.repeat(1, 3), sqrt_info_dist), dim=1)
+        print(f'hello{sqrt_info}')
+
 
         # Solving for relative pose without scale!
         T_CkCf = T_WCk.inv() * T_WCf

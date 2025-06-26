@@ -57,7 +57,7 @@ class MonocularDataset(torch.utils.data.Dataset):
         print(img.shape)
         w_raw, h_raw = img.shape[1], img.shape[0]
         img = resize_img(img)
-        return img['img'][0].shape[1], img['img'][0].shape[0], w_raw, h_raw
+        return img['img'][0].shape[0], img['img'][0].shape[1], w_raw, h_raw
 
     def subsample(self, subsample):
         self.rgb_files = self.rgb_files[::subsample]
@@ -506,7 +506,7 @@ class MP4Dataset(MonocularDataset):
         img = img.astype(self.dtype)
         timestamp = idx / self.fps
         self.timestamps.append(timestamp)
-        return imginput_folder
+        return img
 
 class RGBFiles(MonocularDataset):
     def __init__(self, dataset_path):

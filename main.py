@@ -230,7 +230,6 @@ if __name__ == "__main__":
             break
 
         timestamp, img = dataset[i]
-        print(dataset.rgb_files)
 
         # get frames last camera pose
         T_WC = (
@@ -244,13 +243,14 @@ if __name__ == "__main__":
             X_init, C_init = vggt_inference_mono(model, frame)
             frame_last = frame
             frame.update_pointmap(X_init, C_init)
+            keyframes.append(frame)
             states.set_mode(Mode.TRACKING)
             # states.set_frame(frame)
             i += 1
             continue
 
         if mode == Mode.TRACKING:
-            _ = vggt_match_asymmetric(model, frame_last, frame)
+            _, _ , _ = tracker.track(frame)
             frame_last = frame
             # states.set_frame(frame)
             i += 1

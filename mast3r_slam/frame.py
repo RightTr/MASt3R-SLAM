@@ -117,7 +117,7 @@ def create_frame(i, img, T_WC, img_size=512, device="cuda:0"):
     rgb = img["img"].to(device=device) # (b, c, h, w)
     img_shape = torch.tensor(img["true_shape"], device=device)
     img_true_shape = img_shape.clone()
-    uimg = img["unnormalized_img"]
+    uimg = torch.from_numpy(img["unnormalized_img"]).to(device=device)
     downsample = config["dataset"]["img_downsample"]
     if downsample > 1:
         uimg = uimg[::downsample, ::downsample]
@@ -249,8 +249,8 @@ class SharedKeyframes:
         self.C = torch.zeros(buffer, h * w, 1, device=device, dtype=dtype).share_memory_()
         self.N = torch.zeros(buffer, device=device, dtype=torch.int).share_memory_()
         self.N_updates = torch.zeros(buffer, device=device, dtype=torch.int).share_memory_()
-        self.feat = torch.zeros(buffer, 1, self.num_patches, self.feat_dim, device=device, dtype=dtype).share_memory_()
-        self.pos = torch.zeros(buffer, 1, self.num_patches, 2, device=device, dtype=torch.long).share_memory_()
+        # self.feat = torch.zeros(buffer, 1, self.num_patches, self.feat_dim, device=device, dtype=dtype).share_memory_()
+        # self.pos = torch.zeros(buffer, 1, self.num_patches, 2, device=device, dtype=torch.long).share_memory_()
         self.is_dirty = torch.zeros(buffer, 1, device=device, dtype=torch.bool).share_memory_()
         self.K = torch.zeros(3, 3, device=device, dtype=dtype).share_memory_()
         # fmt: on
@@ -268,8 +268,8 @@ class SharedKeyframes:
             )
             kf.X_canon = self.X[idx]
             kf.C = self.C[idx]
-            kf.feat = self.feat[idx]
-            kf.pos = self.pos[idx]
+            # kf.feat = self.feat[idx]
+            # kf.pos = self.pos[idx]
             kf.N = int(self.N[idx])
             kf.N_updates = int(self.N_updates[idx])
             if config["use_calib"]:
@@ -289,8 +289,8 @@ class SharedKeyframes:
             self.T_WC[idx] = value.T_WC.data
             self.X[idx] = value.X_canon
             self.C[idx] = value.C
-            self.feat[idx] = value.feat
-            self.pos[idx] = value.pos
+            # self.feat[idx] = value.feat
+            # self.pos[idx] = value.pos
             self.N[idx] = value.N
             self.N_updates[idx] = value.N_updates
             self.is_dirty[idx] = True

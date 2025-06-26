@@ -25,7 +25,7 @@ import numpy as np
 
 @torch.inference_mode
 def vggt_inference_mono(model, frame):
-    img = frame.img.unsqueeze(1)
+    img = frame.img.unsqueeze(0).unsqueeze(1)
     print(img.shape)
     aggregated_tokens_list, patch_start_idx = model.aggregator(img)
     # if frame.feat is None:
@@ -36,29 +36,29 @@ def vggt_inference_mono(model, frame):
     Xii = einops.rearrange(X[:, 0], "b h w c -> b (h w) c")
     Cii = einops.rearrange(C[:, 0], "b h w -> b (h w) 1")
 
-    b, a, c = Xii.shape
-    assert c == 3, "Each point must have 3 coordinates (x, y, z)"
+    # b, a, c = Xii.shape
+    # assert c == 3, "Each point must have 3 coordinates (x, y, z)"
 
-    points = Xii.cpu().numpy()
+    # points = Xii.cpu().numpy()
 
-    valid = np.isfinite(points).all(axis=2) & (points[:, :, 2] > 0)
-    points = points[valid]
+    # valid = np.isfinite(points).all(axis=2) & (points[:, :, 2] > 0)
+    # points = points[valid]
 
-    with open("/home/pi/Documents/Right/MASt3R-SLAM/temp/Xii_points.ply", 'w') as f:
-        f.write(f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n")
-        f.write("property float x\nproperty float y\nproperty float z\nend_header\n")
-        for p in points:
-            f.write(f"{p[0]} {p[1]} {p[2]}\n")
+    # with open("/home/pi/Documents/Right/MASt3R-SLAM/temp/Xii_points.ply", 'w') as f:
+    #     f.write(f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n")
+    #     f.write("property float x\nproperty float y\nproperty float z\nend_header\n")
+    #     for p in points:
+    #         f.write(f"{p[0]} {p[1]} {p[2]}\n")
 
-    print(f"✅ Saved {len(points)} point")
+    # print(f"✅ Saved {len(points)} point")
 
 
     return Xii, Cii
     
 @torch.inference_mode
 def vggt_asymmetric_inference(model, frame_i, frame_j):
-    img_i = frame_i.img.unsqueeze(1)
-    img_j = frame_j.img.unsqueeze(1)
+    img_i = frame_i.img.unsqueeze(0).unsqueeze(1)
+    img_j = frame_j.img.unsqueeze(0).unsqueeze(1)
     img_size = frame_i.img.shape[-2:]
     imgs = torch.cat([img_i, img_j], dim=1)
     aggregated_tokens_list, patch_start_idx = model.aggregator(imgs)
@@ -79,7 +79,7 @@ def vggt_asymmetric_inference(model, frame_i, frame_j):
     X, C = model.point_head(
                     aggregated_tokens_list, imgs, patch_start_idx=patch_start_idx
                 )
-    Xii = X[:, 1]
+    Xii = X[:, 0]
     Xij = X[:, 1]
     Cii = C[:, 0]
     Cij = C[:, 1]
@@ -98,23 +98,23 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     Xij = einops.rearrange(Xij, "b h w c -> b (h w) c")
     Cij = einops.rearrange(Cij, "b h w -> b (h w) 1")
 
-    b, a, c = Xij.shape
-    assert c == 3, "Each point must have 3 coordinates (x, y, z)"
+    # b, a, c = Xij.shape
+    # assert c == 3, "Each point must have 3 coordinates (x, y, z)"
 
-    points = Xij.cpu().numpy()
+    # points = Xij.cpu().numpy()
 
-    valid = np.isfinite(points).all(axis=2) & (points[:, :, 2] > 0)
-    points = points[valid]
+    # valid = np.isfinite(points).all(axis=2) & (points[:, :, 2] > 0)
+    # points = points[valid]
 
-    with open("/home/pi/Documents/Right/MASt3R-SLAM/temp/Xij_points.ply", 'w') as f:
-        f.write(f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n")
-        f.write("property float x\nproperty float y\nproperty float z\nend_header\n")
-        for p in points:
-            f.write(f"{p[0]} {p[1]} {p[2]}\n")
+    # with open("/home/pi/Documents/Right/MASt3R-SLAM/temp/Xij_points.ply", 'w') as f:
+    #     f.write(f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n")
+    #     f.write("property float x\nproperty float y\nproperty float z\nend_header\n")
+    #     for p in points:
+    #         f.write(f"{p[0]} {p[1]} {p[2]}\n")
 
-    print(f"✅ Saved {len(points)} point")
+    # print(f"✅ Saved {len(points)} point")
 
-    return idx_i2j, valid_match_j, Xii, Cii, Xij, Cij
+    return idx_i2j, valid_match_j, TCiCj, Xii, Cii, Xij, Cij
 
 def closed_form_sim3(se3, scale = 1.0, R=None, t=None):
     if se3.shape[-2:] == (3, 4):  # expand to 4x4 if needed
