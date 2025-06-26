@@ -13,7 +13,7 @@ from mast3r_slam.global_opt import FactorGraph
 from mast3r_slam.config import load_config, config, set_global_config
 from mast3r_slam.dataloader import Intrinsics, load_dataset
 import mast3r_slam.evaluate as eval
-from mast3r_slam.frame import Mode, SharedKeyframes, SharedStates, create_frame, create_framepair
+from mast3r_slam.frame import Mode, SharedKeyframes, SharedStates, create_frame, Frame
 from mast3r_slam.mast3r_utils import (
     load_mast3r,
     load_retriever,
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     # viz2main = new_queue(manager, args.no_viz)
 
     dataset = load_dataset(args.dataset)
-    dataset.subsample(config["dataset"]["subsample"])
+    # dataset.subsample(config["dataset"]["subsample"])
     h, w, _, _= dataset.get_img_shape()
 
     if args.calib:
@@ -230,6 +230,7 @@ if __name__ == "__main__":
             break
 
         timestamp, img = dataset[i]
+        print(dataset.rgb_files)
 
         # get frames last camera pose
         T_WC = (
@@ -238,12 +239,10 @@ if __name__ == "__main__":
             else states.get_frame().T_WC
         )
         frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
-        if i != 0:
-            frame_last = create_frame(i-1, img, T_WC, img_size=dataset.img_size, device=device)
-
 
         if mode == Mode.INIT:
             X_init, C_init = vggt_inference_mono(model, frame)
+            frame_last = frame
             frame.update_pointmap(X_init, C_init)
             states.set_mode(Mode.TRACKING)
             # states.set_frame(frame)
@@ -252,8 +251,10 @@ if __name__ == "__main__":
 
         if mode == Mode.TRACKING:
             _ = vggt_match_asymmetric(model, frame_last, frame)
+            frame_last = frame
             # states.set_frame(frame)
             i += 1
+
 
             
         

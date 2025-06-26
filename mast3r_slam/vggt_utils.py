@@ -92,11 +92,27 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     idx_i2j, valid_match_j = matching.mymatch_iterative_proj(
         Xii, Xij, TCiCj, idx_i_to_j_init=idx_i2j_init
     )
-    print("herloo")
+
     Xii = einops.rearrange(Xii, "b h w c -> b (h w) c")
     Cii = einops.rearrange(Cii, "b h w -> b (h w) 1")
-    Xii = einops.rearrange(Xij, "b h w c -> b (h w) c")
-    Cii = einops.rearrange(Cij, "b h w -> b (h w) 1")
+    Xij = einops.rearrange(Xij, "b h w c -> b (h w) c")
+    Cij = einops.rearrange(Cij, "b h w -> b (h w) 1")
+
+    b, a, c = Xij.shape
+    assert c == 3, "Each point must have 3 coordinates (x, y, z)"
+
+    points = Xij.cpu().numpy()
+
+    valid = np.isfinite(points).all(axis=2) & (points[:, :, 2] > 0)
+    points = points[valid]
+
+    with open("/home/pi/Documents/Right/MASt3R-SLAM/temp/Xij_points.ply", 'w') as f:
+        f.write(f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n")
+        f.write("property float x\nproperty float y\nproperty float z\nend_header\n")
+        for p in points:
+            f.write(f"{p[0]} {p[1]} {p[2]}\n")
+
+    print(f"✅ Saved {len(points)} point")
 
     return idx_i2j, valid_match_j, Xii, Cii, Xij, Cij
 
