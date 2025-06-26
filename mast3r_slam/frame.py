@@ -113,11 +113,11 @@ class FramePair:
     frame_right: Frame
 
 def create_frame(i, img, T_WC, img_size=512, device="cuda:0"):
-    img = resize_img(img, img_size)
-    rgb = img["img"].to(device=device)
+    img = resize_img(img)
+    rgb = img["img"].to(device=device) # (b, c, h, w)
     img_shape = torch.tensor(img["true_shape"], device=device)
     img_true_shape = img_shape.clone()
-    uimg = torch.from_numpy(img["unnormalized_img"]) / 255.0
+    uimg = img["unnormalized_img"]
     downsample = config["dataset"]["img_downsample"]
     if downsample > 1:
         uimg = uimg[::downsample, ::downsample]

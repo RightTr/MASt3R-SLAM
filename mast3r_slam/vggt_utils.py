@@ -21,20 +21,39 @@ import mast3r_slam.matching as matching
 
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
+import numpy as np
 
 @torch.inference_mode
-def vggt_inference_mono(self, frame):
+def vggt_inference_mono(model, frame):
     img = frame.img.unsqueeze(1)
-    aggregated_tokens_list, patch_start_idx = self.aggregator(img)
+    print(img.shape)
+    aggregated_tokens_list, patch_start_idx = model.aggregator(img)
     # if frame.feat is None:
     #     frame.feat = self.feature_extractor(aggregated_tokens_list, img, patch_start_idx)
-    X, C = self.point_head(
+    X, C = model.point_head(
                     aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
                 )
     Xii = einops.rearrange(X[:, 0], "b h w c -> b (h w) c")
     Cii = einops.rearrange(C[:, 0], "b h w -> b (h w) 1")
 
-    return Xii.squeeze(0), Cii.squeeze(0)
+    b, a, c = Xii.shape
+    assert c == 3, "Each point must have 3 coordinates (x, y, z)"
+
+    points = Xii.cpu().numpy()
+
+    valid = np.isfinite(points).all(axis=2) & (points[:, :, 2] > 0)
+    points = points[valid]
+
+    with open("/home/pi/Documents/Right/MASt3R-SLAM/temp/Xii_points.ply", 'w') as f:
+        f.write(f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n")
+        f.write("property float x\nproperty float y\nproperty float z\nend_header\n")
+        for p in points:
+            f.write(f"{p[0]} {p[1]} {p[2]}\n")
+
+    print(f"✅ Saved {len(points)} point")
+
+
+    return Xii, Cii
     
 @torch.inference_mode
 def vggt_asymmetric_inference(model, frame_i, frame_j):
@@ -73,7 +92,7 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     idx_i2j, valid_match_j = matching.mymatch_iterative_proj(
         Xii, Xij, TCiCj, idx_i_to_j_init=idx_i2j_init
     )
-
+    print("herloo")
     Xii = einops.rearrange(Xii, "b h w c -> b (h w) c")
     Cii = einops.rearrange(Cii, "b h w -> b (h w) 1")
     Xii = einops.rearrange(Xij, "b h w c -> b (h w) c")
@@ -98,6 +117,7 @@ def closed_form_sim3(se3, scale = 1.0, R=None, t=None):
         q = r.as_quat()  # [x,y,z,w]
         quats.append(q)
 
+    quats = np.array(quats)
     quats = torch.tensor(quats, device=R.device, dtype=R.dtype)
 
     t = t.squeeze(-1)

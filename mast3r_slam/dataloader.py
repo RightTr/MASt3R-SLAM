@@ -54,10 +54,10 @@ class MonocularDataset(torch.utils.data.Dataset):
 
     def get_img_shape(self):
         img = self.read_img(0)
-        raw_img_shape = img.shape
-        img = resize_img(img, self.img_size)
-        # 3XHxW, HxWx3 -> HxW, HxW
-        return img["img"][0].shape[1:], raw_img_shape[:2]
+        print(img.shape)
+        w_raw, h_raw = img.shape[1], img.shape[0]
+        img = resize_img(img)
+        return img['img'][0].shape[1], img['img'][0].shape[0], w_raw, h_raw
 
     def subsample(self, subsample):
         self.rgb_files = self.rgb_files[::subsample]
@@ -118,7 +118,7 @@ class StereoDataset(torch.utils.data.Dataset):
         raw_img_shape = img_left.shape
         img = resize_img(img_left, self.img_size)
         # 3XHxW, HxWx3 -> HxW, HxW
-        return img["img"][0].shape[1:], raw_img_shape[:2]
+        return img[0][0].shape, raw_img_shape[:2]
 
     def subsample(self, subsample):
         self.rgb_files_left = self.rgb_files_left[::subsample]
@@ -156,12 +156,12 @@ class VIVIDDataset(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
-        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "Thermal_fs/data/*.png")))
+        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "RGB/data/*.png")))
         self.n_img = len(self.rgb_files)
         self.poses = self.load_poses(os.path.join(self.dataset_path, "gt_thermal.txt"))
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
         calib = np.array([437.38861083256637, 437.29475745770907, 323.5284494924228, 256.36315482047905, 0, 0, 0, 0, 0])
-        W, H = 640, 512
+        W, H = 640, 480
         self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
 
     def load_poses(self, path):
@@ -527,7 +527,7 @@ class Intrinsics:
         self.mapx = mapx
         self.mapy = mapy
         _, (scale_w, scale_h, half_crop_w, half_crop_h) = resize_img(
-            np.zeros((H, W, 3)), self.img_size, return_transformation=True
+            np.zeros((H, W, 3)), return_transformation=True
         )
         self.K_frame = self.K.copy()
         self.K_frame[0, 0] = self.K[0, 0] / scale_w

@@ -139,6 +139,8 @@ def mymatch_iterative_proj(Xii, Xij, T_CiCj, idx_i_to_j_init=None):
     valid_dists2 = (dists2 < cfg["dist_thresh"]).view(b, -1)
     valid_proj2 = valid_proj2 & valid_dists2
 
+    print(valid_proj2[0].sum(), "valid matches")
+
     # Convert to linear index
     idx_i_to_j = pixel_to_lin(p1, w)
 

@@ -325,14 +325,14 @@ def _resize_pil_image(img, long_edge_size):
     return img.resize(new_size, interp)
 
 
-def resize_img(img, size, square_ok=False, return_transformation=False, mode="crop"): #TODO: Resize correctly?
+def resize_img(img, return_transformation=False, mode="crop"): #TODO: Resize correctly?
     if mode not in ["crop", "pad"]:
         raise ValueError("Mode must be either 'crop' or 'pad'")
     
     target_size = 518
     img = (img * 255).clip(0, 255).astype(np.uint8)
     img = Image.fromarray(img)
-    height0, width0 = img.size
+    width0, height0 = img.size
 
     if mode == "pad":
         # Make the largest dimension 518px while maintaining aspect ratio
@@ -350,7 +350,7 @@ def resize_img(img, size, square_ok=False, return_transformation=False, mode="cr
 
     # Resize with new dimensions (width, height)
     img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
-    height, width = img.size
+    width, height = img.size
 
     # Center crop height if it's larger than 518 (only in crop mode)
     if mode == "crop" and new_height > target_size:
@@ -370,18 +370,20 @@ def resize_img(img, size, square_ok=False, return_transformation=False, mode="cr
 
             # Pad with white (value=1.0)
             img = ImageOps.expand(img, border=(pad_left, pad_top, pad_right, pad_bottom), fill=255)
+    
+    img = np.asarray(img).astype(np.float32) # (h, w, c) unnormalized
 
     res = dict(
-        img=ImgNorm(img)[None],
-        true_shape=np.int32([img.size[::-1]]),
-        unnormalized_img=np.asarray(img),
+        img=torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0) / 255.0, # (b, c, h, w)
+        true_shape = np.int32(img.shape[:2][::-1]), # (w, h)
+        unnormalized_img = img,
     )
 
     if return_transformation:
         scale_w = width0 / width 
         scale_h = height0 / height
-        half_crop_w = (width - img.size[0]) / 2
-        half_crop_h = (height - img.size[1]) / 2
+        half_crop_w = (width - img.shape[0]) / 2
+        half_crop_h = (height - img.shape[1]) / 2
         return res, (scale_w, scale_h, half_crop_w, half_crop_h)
     
     return res

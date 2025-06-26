@@ -176,7 +176,7 @@ if __name__ == "__main__":
 
     dataset = load_dataset(args.dataset)
     dataset.subsample(config["dataset"]["subsample"])
-    h, w = dataset.get_img_shape()[0]
+    h, w, _, _= dataset.get_img_shape()
 
     if args.calib:
         with open(args.calib, "r") as f:
@@ -201,7 +201,9 @@ if __name__ == "__main__":
     #     viz.start()
 
 
-    model = load_vggt(device=device)                                 
+    model = load_vggt(device=device)  
+    model.share_memory()
+
     tracker = FrameTracker(model, keyframes, device)
     last_msg = WindowMsg()
 
