@@ -93,10 +93,10 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
         Xii, Xij, TCiCj, idx_i_to_j_init=idx_i2j_init
     )
 
-    Xii = einops.rearrange(Xii, "b h w c -> b (h w) c")
-    Cii = einops.rearrange(Cii, "b h w -> b (h w) 1")
-    Xij = einops.rearrange(Xij, "b h w c -> b (h w) c")
-    Cij = einops.rearrange(Cij, "b h w -> b (h w) 1")
+    Xii = einops.rearrange(Xii[0, :], "h w c -> (h w) c")
+    Cii = einops.rearrange(Cii[0, :], "h w -> (h w) 1")
+    Xij = einops.rearrange(Xij[0, :], "h w c -> (h w) c")
+    Cij = einops.rearrange(Cij[0, :], "h w -> (h w) 1")
 
     # b, a, c = Xij.shape
     # assert c == 3, "Each point must have 3 coordinates (x, y, z)"

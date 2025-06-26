@@ -41,7 +41,7 @@ class FrameTracker:
         keyframe = self.keyframes.last_keyframe()
         
         idx_f2k, valid_match_k, T_CkCf, Xff, Xkf, Cff, Ckf = vggt_match_asymmetric(
-            self.model, keyframe, frame, self.idx_f2k)
+            self.model, keyframe, frame, self.idx_f2k)   
 
         self.idx_f2k = idx_f2k.clone()
 
@@ -55,16 +55,12 @@ class FrameTracker:
         else:
             K = None
         
-        Qk = torch.ones_like(Xk[..., 2:3]) 
-        print(Qk.shape)
 
         Xf, Xk, T_WCk, Cf, Ck, meas_k, valid_meas_k = self.get_points_poses(
             frame, keyframe, idx_f2k, img_size, use_calib, K
         )
 
-        print(valid_match_k.shape)
-
-
+        Qk = torch.ones_like(valid_match_k)
 
         T_WCf = T_WCk * T_CkCf
 
