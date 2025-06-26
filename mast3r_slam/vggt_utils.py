@@ -35,6 +35,8 @@ def vggt_inference_mono(model, frame):
                 )
     Xii = einops.rearrange(X[:, 0], "b h w c -> b (h w) c")
     Cii = einops.rearrange(C[:, 0], "b h w -> b (h w) 1")
+    Xii = Xii[:, 0]
+    Cii = Cii[:, 0]
 
     # b, a, c = Xii.shape
     # assert c == 3, "Each point must have 3 coordinates (x, y, z)"

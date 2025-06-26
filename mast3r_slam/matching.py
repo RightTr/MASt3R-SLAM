@@ -144,4 +144,4 @@ def mymatch_iterative_proj(Xii, Xij, T_CiCj, idx_i_to_j_init=None):
     # Convert to linear index
     idx_i_to_j = pixel_to_lin(p1, w)
 
-    return idx_i_to_j, valid_proj2.permute(1, 0)
+    return idx_i_to_j, valid_proj2.unsqueeze(-1)

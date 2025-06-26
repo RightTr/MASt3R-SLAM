@@ -47,6 +47,8 @@ class FrameTracker:
 
         frame.update_pointmap(Xff, Cff)
 
+        valid_match_k = valid_match_k[0]
+
         use_calib = config["use_calib"]
         img_size = frame.img.shape[-2:]
 
@@ -64,10 +66,10 @@ class FrameTracker:
 
         T_WCf = T_WCk * T_CkCf
 
-        valid_Cf = Cf > self.cfg["C_conf"]
+        valid_Cf = Cf > self.cfg["C_conf"] # TODO: Why Cf dimension is 1 (h w) 1
         valid_Ck = Ck > self.cfg["C_conf"]
 
-        valid_opt = valid_match_k & valid_Cf & valid_Ck
+        valid_opt = valid_match_k & valid_Ck
         valid_kf = valid_match_k
 
         match_frac = valid_opt.sum() / valid_opt.numel()
@@ -76,8 +78,9 @@ class FrameTracker:
         print(f"Skipped frame {frame.frame_id}")
         # return False, [], True
 
+        print(valid_opt.shape, Qk.shape)
         if not use_calib:
-            T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3(
+            T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3( # TODO: BA  
                 Xf, Xk, T_WCf, T_WCk, Qk, valid_opt
             )
         else:
@@ -175,7 +178,7 @@ class FrameTracker:
             valid_meas_k = Xk[..., 2:3] > self.cfg["depth_eps"]
             meas_k[~valid_meas_k.repeat(1, 3)] = 0.0
 
-        return Xf[0][idx_f2k], Xk, T_WCk, Cf[0][idx_f2k], Ck, meas_k, valid_meas_k
+        return Xf[idx_f2k], Xk, T_WCk, Cf[idx_f2k], Ck, meas_k, valid_meas_k
 
     def solve(self, sqrt_info, r, J):
         whitened_r = sqrt_info * r
