@@ -40,14 +40,15 @@ class FrameTracker:
     def track(self, frame: Frame):
         keyframe = self.keyframes.last_keyframe()
         
-        idx_f2k, valid_match_k, T_CkCf, Xff, Xkf, Cff, Ckf = vggt_match_asymmetric(
+        idx_f2k, valid_match_k, T_CkCf, Xff, Cff, Xkf, Ckf = vggt_match_asymmetric(
             self.model, keyframe, frame, self.idx_f2k)   
-
+        
         self.idx_f2k = idx_f2k.clone()
 
         frame.update_pointmap(Xff, Cff)
 
         valid_match_k = valid_match_k[0]
+        idx_f2k = idx_f2k[0]
 
         use_calib = config["use_calib"]
         img_size = frame.img.shape[-2:]
@@ -69,7 +70,8 @@ class FrameTracker:
         valid_Cf = Cf > self.cfg["C_conf"] # TODO: Why Cf dimension is 1 (h w) 1
         valid_Ck = Ck > self.cfg["C_conf"]
 
-        valid_opt = valid_match_k & valid_Ck
+        print(valid_Ck.shape, valid_match_k.shape, valid_Cf.shape)
+        valid_opt = valid_match_k & valid_Ck & valid_Cf
         valid_kf = valid_match_k
 
         match_frac = valid_opt.sum() / valid_opt.numel()
@@ -78,7 +80,7 @@ class FrameTracker:
         print(f"Skipped frame {frame.frame_id}")
         # return False, [], True
 
-        print(valid_opt.shape, Qk.shape)
+        print(valid_opt.sum().item(), "valid matches")
         if not use_calib:
             T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3( # TODO: BA  
                 Xf, Xk, T_WCf, T_WCk, Qk, valid_opt
@@ -202,8 +204,6 @@ class FrameTracker:
         sqrt_info_ray = 1 / self.cfg["sigma_ray"] * valid * torch.sqrt(Qk)
         sqrt_info_dist = 1 / self.cfg["sigma_dist"] * valid * torch.sqrt(Qk)
         sqrt_info = torch.cat((sqrt_info_ray.repeat(1, 3), sqrt_info_dist), dim=1)
-        print(f'hello{sqrt_info}')
-
 
         # Solving for relative pose without scale!
         T_CkCf = T_WCk.inv() * T_WCf

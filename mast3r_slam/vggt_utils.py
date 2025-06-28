@@ -26,7 +26,6 @@ import numpy as np
 @torch.inference_mode
 def vggt_inference_mono(model, frame):
     img = frame.img.unsqueeze(0).unsqueeze(1)
-    print(img.shape)
     aggregated_tokens_list, patch_start_idx = model.aggregator(img)
     # if frame.feat is None:
     #     frame.feat = self.feature_extractor(aggregated_tokens_list, img, patch_start_idx)
@@ -35,8 +34,6 @@ def vggt_inference_mono(model, frame):
                 )
     Xii = einops.rearrange(X[:, 0], "b h w c -> b (h w) c")
     Cii = einops.rearrange(C[:, 0], "b h w -> b (h w) 1")
-    Xii = Xii[:, 0]
-    Cii = Cii[:, 0]
 
     # b, a, c = Xii.shape
     # assert c == 3, "Each point must have 3 coordinates (x, y, z)"
@@ -99,7 +96,7 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     Cii = einops.rearrange(Cii[0, :], "h w -> (h w) 1")
     Xij = einops.rearrange(Xij[0, :], "h w c -> (h w) c")
     Cij = einops.rearrange(Cij[0, :], "h w -> (h w) 1")
-
+    
     # b, a, c = Xij.shape
     # assert c == 3, "Each point must have 3 coordinates (x, y, z)"
 
