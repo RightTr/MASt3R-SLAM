@@ -37,25 +37,8 @@ def vggt_inference_mono(model, frame):
     img_size = frame.img.shape[-2:]
     extrinsic, intrinsic = pose_encoding_to_extri_intri(P, img_size) 
     
-    Xii = einops.rearrange(X[:, 0], "b h w c -> b (h w) c")
-    Cii = einops.rearrange(C[:, 0], "b h w -> b (h w) 1")
-
-    # b, a, c = Xii.shape
-    # assert c == 3, "Each point must have 3 coordinates (x, y, z)"
-
-    # points = Xii.cpu().numpy()
-
-    # valid = np.isfinite(points).all(axis=2) & (points[:, :, 2] > 0)
-    # points = points[valid]
-
-    # with open("/home/pi/Documents/Right/MASt3R-SLAM/temp/Xii_points.ply", 'w') as f:
-    #     f.write(f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n")
-    #     f.write("property float x\nproperty float y\nproperty float z\nend_header\n")
-    #     for p in points:
-    #         f.write(f"{p[0]} {p[1]} {p[2]}\n")
-
-    # print(f"✅ Saved {len(points)} point")
-
+    Xii = einops.rearrange(X[0, 0], "h w c -> (h w) c")
+    Cii = einops.rearrange(C[0, 0], "h w -> (h w) 1")
 
     return Xii, Cii, intrinsic[:, 0].squeeze(0)
     
@@ -102,21 +85,26 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     Xij = einops.rearrange(Xij[0, :], "h w c -> (h w) c")
     Cij = einops.rearrange(Cij[0, :], "h w -> (h w) 1")
 
-    # b, a, c = Xij.shape
+
+    # a, c = Xii.shape
     # assert c == 3, "Each point must have 3 coordinates (x, y, z)"
 
-    # points = Xij.cpu().numpy()
-
-    # valid = np.isfinite(points).all(axis=2) & (points[:, :, 2] > 0)
+    # points = Xii.cpu().numpy()
+    # finite_mask = np.isfinite(points).all(axis=1)
+    # positive_z = points[:, 2] > 0
+    # valid = finite_mask & positive_z
     # points = points[valid]
 
-    # with open("/home/pi/Documents/Right/MASt3R-SLAM/temp/Xij_points.ply", 'w') as f:
+    # with open("/home/pi/Documents/Right/MASt3R-SLAM/temp/Xii_points.ply", 'w') as f:
     #     f.write(f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n")
-    #     f.write("property float x\nproperty float y\nproperty float z\nend_header\n")
+    #     f.write("property float x\nproperty float y\nproperty float z\n")
+    #     f.write("property uchar red\nproperty uchar green\nproperty uchar blue\n")
+    #     f.write("end_header\n")
     #     for p in points:
-    #         f.write(f"{p[0]} {p[1]} {p[2]}\n")
+    #         f.write(f"{p[0]} {p[1]} {p[2]} 255 255 255\n")
 
-    # print(f"✅ Saved {len(points)} point")
+    # print(f"✅ Saved {len(points)} point{'s' if len(points) != 1 else ''}")
+    
     return idx_i2j, valid_match_j, TCiCj, Xii, Cii, Xij, Cij, K
 
 def closed_form_sim3(se3, scale = 1.0, R=None, t=None):

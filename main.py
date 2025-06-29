@@ -177,12 +177,12 @@ if __name__ == "__main__":
             intrinsics = yaml.load(f, Loader=yaml.SafeLoader)
         config["use_calib"] = True
         dataset.use_calibration = True
-        dataset.camera_intrinsics = Intrinsics.from_calib(
-            dataset.img_size,
-            intrinsics["width"],
-            intrinsics["height"],
-            intrinsics["calibration"],
-        )
+        # dataset.camera_intrinsics = Intrinsics.from_calib(
+        #     dataset.img_size,
+        #     intrinsics["width"],
+        #     intrinsics["height"],
+        #     intrinsics["calibration"],
+        # )
 
     keyframes = SharedKeyframes(manager, h, w)
     states = SharedStates(manager, h, w)
@@ -251,7 +251,8 @@ if __name__ == "__main__":
             X_init, C_init, K_init = vggt_inference_mono(model, frame)
             frame.update_pointmap(X_init, C_init)
             keyframes.append(frame)
-            keyframes.set_intrinsics(K_init)
+            if use_calib:
+                keyframes.set_intrinsics(K_init)
             states.set_mode(Mode.TRACKING)
             states.set_frame(frame)
             i += 1
@@ -280,7 +281,8 @@ if __name__ == "__main__":
         if add_new_kf:
             print(f"Add keyframe {i}")
             keyframes.append(frame)
-            keyframes.set_intrinsics(Kf)
+            if use_calib:
+                keyframes.set_intrinsics(Kf)
             # states.queue_global_optimization(len(keyframes) - 1)
             # In single threaded mode, wait for the backend to finish
         #     while config["single_thread"]:

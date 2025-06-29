@@ -355,7 +355,7 @@ class Window(WindowEvents):
         vao.render(mode=moderngl.POINTS, vertices=w * h)
         vao.release()
 
-    def frame_X(self, frame):
+    def frame_X(self, frame): # TODO: Reconstruction update
         if config["use_calib"]:
             Xs = frame.X_canon[None]
             if self.dP_dz is None:

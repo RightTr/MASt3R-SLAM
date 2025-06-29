@@ -30,7 +30,7 @@ tracking:
   sigma_point: 0.05
   pixel_border: -10 # Only in calib (negative means allow pixels outside image up to that distance)
   depth_eps: 1e-6 # Only in calib case
-  filtering_mode: weighted_pointmap # recent, first, best_score, weighted_pointmap, weighted_spherical, indep_conf
+  filtering_mode: weighted_spherical # recent, first, best_score, weighted_pointmap, weighted_spherical, indep_conf
   filtering_score: median # median, mean (only used for filtering_mode=best_score)
 
 local_opt:

@@ -40,8 +40,8 @@ class FrameTracker:
     def track(self, frame: Frame):
         keyframe = self.keyframes.last_keyframe()
         
-        idx_f2k, valid_match_k, T_CkCf, Xff, Cff, Xkf, Ckf, K = vggt_match_asymmetric(
-            self.model, keyframe, frame, self.idx_f2k)   
+        idx_f2k, valid_match_k, T_CkCf, Xff, Cff, Xfk, Ckf, K = vggt_match_asymmetric(
+            self.model, frame, keyframe, self.idx_f2k)   
         
         Kf = K[1, :]
 
@@ -104,7 +104,7 @@ class FrameTracker:
         print(T_WCf.data)
 
         T_CfCk = T_CkCf.inv()
-        Xkk = T_CfCk.act(Xkf)
+        Xkk = T_CfCk.act(Xfk)
         keyframe.update_pointmap(Xkk, Ckf)
 
         self.keyframes[len(self.keyframes) - 1] = keyframe
