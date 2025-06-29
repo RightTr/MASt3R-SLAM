@@ -40,9 +40,11 @@ class FrameTracker:
     def track(self, frame: Frame):
         keyframe = self.keyframes.last_keyframe()
         
-        idx_f2k, valid_match_k, T_CkCf, Xff, Cff, Xkf, Ckf = vggt_match_asymmetric(
+        idx_f2k, valid_match_k, T_CkCf, Xff, Cff, Xkf, Ckf, K = vggt_match_asymmetric(
             self.model, keyframe, frame, self.idx_f2k)   
         
+        Kf = K[1, :]
+
         self.idx_f2k = idx_f2k.clone()
 
         frame.update_pointmap(Xff, Cff)
@@ -54,11 +56,11 @@ class FrameTracker:
         img_size = frame.img.shape[-2:]
 
         if use_calib:
-            K = keyframe.K
+            K = self.keyframes.get_intrinsics()
         else:
             K = None
-        
 
+        print(K)
         Xf, Xk, T_WCk, Cf, Ck, meas_k, valid_meas_k = self.get_points_poses(
             frame, keyframe, idx_f2k, img_size, use_calib, K
         )
@@ -67,20 +69,18 @@ class FrameTracker:
 
         T_WCf = T_WCk * T_CkCf
 
-        valid_Cf = Cf > self.cfg["C_conf"] # TODO: Why Cf dimension is 1 (h w) 1
+        valid_Cf = Cf > self.cfg["C_conf"]
         valid_Ck = Ck > self.cfg["C_conf"]
 
-        print(valid_Ck.shape, valid_match_k.shape, valid_Cf.shape)
         valid_opt = valid_match_k & valid_Ck & valid_Cf
         valid_kf = valid_match_k
 
         match_frac = valid_opt.sum() / valid_opt.numel()
 
-        # if match_frac < self.cfg["min_match_frac"]:
-        print(f"Skipped frame {frame.frame_id}")
-        # return False, [], True
+        if match_frac < self.cfg["min_match_frac"]:
+            print(f"Skipped frame {frame.frame_id}")
+            return False, [], True
 
-        print(valid_opt.sum().item(), "valid matches")
         if not use_calib:
             T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3( # TODO: BA  
                 Xf, Xk, T_WCf, T_WCk, Qk, valid_opt
@@ -100,6 +100,8 @@ class FrameTracker:
             )
         
         frame.T_WC = T_WCf
+
+        print(T_WCf.data)
 
         T_CfCk = T_CkCf.inv()
         Xkk = T_CfCk.act(Xkf)
@@ -128,6 +130,7 @@ class FrameTracker:
                 frame.get_average_conf(),
             ],
             False,
+            Kf
         )
         
     def track_nk(self, frame_i: Frame, frame_j: Frame): # Track with no keyframe
@@ -167,6 +170,9 @@ class FrameTracker:
 
         meas_k = None
         valid_meas_k = None
+
+        # Kk = K[0, :]
+        # Kf = K[1, :]
 
         if use_calib:
             Xf = constrain_points_to_ray(img_size, Xf[None], K).squeeze(0)

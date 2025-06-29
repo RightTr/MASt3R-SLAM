@@ -14,16 +14,10 @@ from mast3r_slam.config import load_config, config, set_global_config
 from mast3r_slam.dataloader import Intrinsics, load_dataset
 import mast3r_slam.evaluate as eval
 from mast3r_slam.frame import Mode, SharedKeyframes, SharedStates, create_frame, Frame
-from mast3r_slam.mast3r_utils import (
-    load_mast3r,
-    load_retriever,
-    mast3r_inference_mono,
-    mast3r_inference_stereo,
-)
+
 from mast3r_slam.vggt_utils import (
     load_vggt,
     vggt_inference_mono,
-    vggt_match_asymmetric
     )
 from mast3r_slam.multiprocess_utils import new_queue, try_get_msg
 from mast3r_slam.tracker import FrameTracker
@@ -171,8 +165,8 @@ if __name__ == "__main__":
     print(config)
 
     manager = mp.Manager()
-    # main2viz = new_queue(manager, args.no_viz)
-    # viz2main = new_queue(manager, args.no_viz)
+    main2viz = new_queue(manager, args.no_viz)
+    viz2main = new_queue(manager, args.no_viz)
 
     dataset = load_dataset(args.dataset)
     # dataset.subsample(config["dataset"]["subsample"])
@@ -193,16 +187,30 @@ if __name__ == "__main__":
     keyframes = SharedKeyframes(manager, h, w)
     states = SharedStates(manager, h, w)
 
-    # if not args.no_viz:
-    #     viz = mp.Process(
-    #         target=run_visualization,
-    #         args=(config, states, keyframes, main2viz, viz2main),
-    #     )
-    #     viz.start()
+    if not args.no_viz:
+        viz = mp.Process(
+            target=run_visualization,
+            args=(config, states, keyframes, main2viz, viz2main),
+        )
+        viz.start()
 
 
     model = load_vggt(device=device)  
     model.share_memory()
+
+    has_calib = dataset.has_calib()
+    use_calib = config["use_calib"]
+
+    # if use_calib and not has_calib:
+    #     print("[Warning] No calibration provided for this dataset!")
+    #     sys.exit(0)
+    # K = None
+    # if use_calib:
+    #     K = torch.from_numpy(dataset.camera_intrinsics.K_frame).to(
+    #         device, dtype=torch.float32
+    #     )
+    #     keyframes.set_intrinsics(K)
+
 
     tracker = FrameTracker(model, keyframes, device)
     last_msg = WindowMsg()
@@ -240,25 +248,19 @@ if __name__ == "__main__":
         frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
 
         if mode == Mode.INIT:
-            X_init, C_init = vggt_inference_mono(model, frame)
-            frame_last = frame
+            X_init, C_init, K_init = vggt_inference_mono(model, frame)
             frame.update_pointmap(X_init, C_init)
             keyframes.append(frame)
+            keyframes.set_intrinsics(K_init)
             states.set_mode(Mode.TRACKING)
-            # states.set_frame(frame)
+            states.set_frame(frame)
             i += 1
             continue
 
         if mode == Mode.TRACKING:
-            _, _ , _ = tracker.track(frame)
-            frame_last = frame
-            # states.set_frame(frame)
+            add_new_kf, match_info, try_reloc, Kf = tracker.track(frame)
+            states.set_frame(frame)
             i += 1
-
-
-            
-        
-        
 
         # elif mode == Mode.RELOC:
         #     X, C = mast3r_inference_mono(model, frame)
@@ -275,10 +277,12 @@ if __name__ == "__main__":
         # else:
         #     raise Exception("Invalid mode")
 
-        # if add_new_kf:
-        #     keyframes.append(frame)
-        #     states.queue_global_optimization(len(keyframes) - 1)
-        #     # In single threaded mode, wait for the backend to finish
+        if add_new_kf:
+            print(f"Add keyframe {i}")
+            keyframes.append(frame)
+            keyframes.set_intrinsics(Kf)
+            # states.queue_global_optimization(len(keyframes) - 1)
+            # In single threaded mode, wait for the backend to finish
         #     while config["single_thread"]:
         #         with states.lock:
         #             if len(states.global_optimizer_tasks) == 0:
@@ -306,5 +310,5 @@ if __name__ == "__main__":
 
     print("done")
     # backend.join()
-    # if not args.no_viz:
-    #     viz.join()
+    if not args.no_viz:
+        viz.join()

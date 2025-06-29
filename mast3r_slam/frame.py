@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Optional
 import lietorch
 import torch
-from mast3r_slam.mast3r_utils import resize_img
+from mast3r_slam.vggt_utils import resize_img
 from mast3r_slam.config import config
 
 
@@ -252,7 +252,7 @@ class SharedKeyframes:
         # self.feat = torch.zeros(buffer, 1, self.num_patches, self.feat_dim, device=device, dtype=dtype).share_memory_()
         # self.pos = torch.zeros(buffer, 1, self.num_patches, 2, device=device, dtype=torch.long).share_memory_()
         self.is_dirty = torch.zeros(buffer, 1, device=device, dtype=torch.bool).share_memory_()
-        self.K = torch.zeros(3, 3, device=device, dtype=dtype).share_memory_()
+        self.K = torch.zeros(buffer, 3, 3, device=device, dtype=dtype).share_memory_()
         # fmt: on
 
     def __getitem__(self, idx) -> Frame:
@@ -273,7 +273,7 @@ class SharedKeyframes:
             kf.N = int(self.N[idx])
             kf.N_updates = int(self.N_updates[idx])
             if config["use_calib"]:
-                kf.K = self.K
+                kf.K = self.K[idx]
             return kf
 
     def __setitem__(self, idx, value: Frame) -> None:
@@ -327,9 +327,13 @@ class SharedKeyframes:
     def set_intrinsics(self, K):
         assert config["use_calib"]
         with self.lock:
-            self.K[:] = K
-
+            if self.n_size.value == 0:
+                self.K[0] = K
+            if self.n_size.value > 0:
+                self.K[self.n_size.value - 1] = K
+        
     def get_intrinsics(self):
         assert config["use_calib"]
         with self.lock:
-            return self.K
+            return self.K[self.n_size.value - 1]
+

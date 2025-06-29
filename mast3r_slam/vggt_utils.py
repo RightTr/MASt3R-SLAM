@@ -11,13 +11,14 @@ else:
 import torch
 import torch.nn as nn
 from huggingface_hub import PyTorchModelHubMixin
-from mast3r_slam.frame import Frame
 from vggt.models.vggt import VGGT
 from torchvision import transforms as TF
 import einops
 import lietorch
 from scipy.spatial.transform import Rotation as R_scipy
 import mast3r_slam.matching as matching
+from PIL import Image
+from PIL import ImageOps
 
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
@@ -32,6 +33,10 @@ def vggt_inference_mono(model, frame):
     X, C = model.point_head(
                     aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
                 )
+    P = model.camera_head(aggregated_tokens_list)[-1]
+    img_size = frame.img.shape[-2:]
+    extrinsic, intrinsic = pose_encoding_to_extri_intri(P, img_size) 
+    
     Xii = einops.rearrange(X[:, 0], "b h w c -> b (h w) c")
     Cii = einops.rearrange(C[:, 0], "b h w -> b (h w) 1")
 
@@ -52,7 +57,7 @@ def vggt_inference_mono(model, frame):
     # print(f"✅ Saved {len(points)} point")
 
 
-    return Xii, Cii
+    return Xii, Cii, intrinsic[:, 0].squeeze(0)
     
 @torch.inference_mode
 def vggt_asymmetric_inference(model, frame_i, frame_j):
@@ -71,7 +76,7 @@ def vggt_asymmetric_inference(model, frame_i, frame_j):
 
     P = model.camera_head(aggregated_tokens_list)[-1]
 
-    extrinsics, _ = pose_encoding_to_extri_intri(P, img_size) 
+    extrinsics, intrinsics = pose_encoding_to_extri_intri(P, img_size) 
 
     T_CiCj = closed_form_sim3(extrinsics[:, 1]) 
     
@@ -83,10 +88,10 @@ def vggt_asymmetric_inference(model, frame_i, frame_j):
     Cii = C[:, 0]
     Cij = C[:, 1]
 
-    return T_CiCj, Xii, Xij, Cii, Cij
+    return T_CiCj, Xii, Xij, Cii, Cij, intrinsics.squeeze(0)
 
 def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
-    TCiCj, Xii, Xij, Cii, Cij = vggt_asymmetric_inference(model, frame_i, frame_j)
+    TCiCj, Xii, Xij, Cii, Cij, K = vggt_asymmetric_inference(model, frame_i, frame_j)
 
     idx_i2j, valid_match_j = matching.mymatch_iterative_proj(
         Xii, Xij, TCiCj, idx_i_to_j_init=idx_i2j_init
@@ -96,7 +101,7 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     Cii = einops.rearrange(Cii[0, :], "h w -> (h w) 1")
     Xij = einops.rearrange(Xij[0, :], "h w c -> (h w) c")
     Cij = einops.rearrange(Cij[0, :], "h w -> (h w) 1")
-    
+
     # b, a, c = Xij.shape
     # assert c == 3, "Each point must have 3 coordinates (x, y, z)"
 
@@ -112,8 +117,7 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     #         f.write(f"{p[0]} {p[1]} {p[2]}\n")
 
     # print(f"✅ Saved {len(points)} point")
-
-    return idx_i2j, valid_match_j, TCiCj, Xii, Cii, Xij, Cij
+    return idx_i2j, valid_match_j, TCiCj, Xii, Cii, Xij, Cij, K
 
 def closed_form_sim3(se3, scale = 1.0, R=None, t=None):
     if se3.shape[-2:] == (3, 4):  # expand to 4x4 if needed
@@ -152,3 +156,66 @@ def load_vggt(path=None, device="cuda"):
     model.eval()
     model = model.to(device)
     return model
+
+def resize_img(img, return_transformation=False, mode="crop"):
+    if mode not in ["crop", "pad"]:
+        raise ValueError("Mode must be either 'crop' or 'pad'")
+    
+    target_size = 518
+    img = (img * 255).clip(0, 255).astype(np.uint8)
+    img = Image.fromarray(img)
+    width0, height0 = img.size
+
+    if mode == "pad":
+        # Make the largest dimension 518px while maintaining aspect ratio
+        if width0 >= height0:
+            new_width = target_size
+            new_height = round(height0 * (new_width / width0) / 14) * 14  # Make divisible by 14
+        else:
+            new_height = target_size
+            new_width = round(width0 * (new_height / height0) / 14) * 14  # Make divisible by 14
+    else:  # mode == "crop"
+        # Original behavior: set width to 518px
+        new_width = target_size
+        # Calculate height maintaining aspect ratio, divisible by 14
+        new_height = round(height0 * (new_width / width0) / 14) * 14
+
+    # Resize with new dimensions (width, height)
+    img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
+    width, height = img.size
+
+    # Center crop height if it's larger than 518 (only in crop mode)
+    if mode == "crop" and new_height > target_size:
+        start_y = (new_height - target_size) // 2
+        img = img.crop((0, start_y, width, start_y + target_size))
+
+    # For pad mode, pad to make a square of target_size x target_size
+    if mode == "pad":
+        h_padding = target_size - img.shape[1]
+        w_padding = target_size - img.shape[2]
+
+        if h_padding > 0 or w_padding > 0:
+            pad_top = h_padding // 2
+            pad_bottom = h_padding - pad_top
+            pad_left = w_padding // 2
+            pad_right = w_padding - pad_left
+
+            # Pad with white (value=1.0)
+            img = ImageOps.expand(img, border=(pad_left, pad_top, pad_right, pad_bottom), fill=255)
+    
+    img = np.asarray(img).astype(np.float32) # (h, w, c) unnormalized
+
+    res = dict(
+        img=torch.from_numpy(img).permute(2, 0, 1) / 255.0, # (b, c, h, w)
+        true_shape = np.int32(img.shape[:2][::-1]), # (w, h)
+        unnormalized_img = img,
+    )
+
+    if return_transformation:
+        scale_w = width0 / width 
+        scale_h = height0 / height
+        half_crop_w = (width - img.shape[0]) / 2
+        half_crop_h = (height - img.shape[1]) / 2
+        return res, (scale_w, scale_h, half_crop_w, half_crop_h)
+    
+    return res

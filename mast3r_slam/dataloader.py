@@ -9,7 +9,7 @@ import yaml
 import glob
 import os
 
-from mast3r_slam.mast3r_utils import resize_img
+from mast3r_slam.vggt_utils import resize_img
 from mast3r_slam.config import config
 from scipy.spatial.transform import Rotation, Slerp
 
@@ -158,7 +158,7 @@ class VIVIDDataset(MonocularDataset):
         self.dataset_path = pathlib.Path(dataset_path)
         self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "RGB/data/*.png")))
         self.n_img = len(self.rgb_files)
-        self.poses = self.load_poses(os.path.join(self.dataset_path, "gt_thermal.txt"))
+        self.poses = self.load_poses(os.path.join(self.dataset_path, "gt_RGB.txt"))
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]
         calib = np.array([437.38861083256637, 437.29475745770907, 323.5284494924228, 256.36315482047905, 0, 0, 0, 0, 0])
         W, H = 640, 480
