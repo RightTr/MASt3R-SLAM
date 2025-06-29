@@ -60,7 +60,6 @@ class FrameTracker:
         else:
             K = None
 
-        print(K)
         Xf, Xk, T_WCk, Cf, Ck, meas_k, valid_meas_k = self.get_points_poses(
             frame, keyframe, idx_f2k, img_size, use_calib, K
         )

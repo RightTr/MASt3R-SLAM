@@ -25,7 +25,6 @@ class FactorGraph:
         self.Q_jj2ii = torch.as_tensor([], dtype=torch.float32, device=self.device)
         self.window_size = self.cfg["window_size"]
 
-        self.K = K
 
     def add_factors(self, ii, jj, min_match_frac, is_reloc=False):
         kf_ii = [self.frames[idx] for idx in ii]
@@ -158,7 +157,7 @@ class FactorGraph:
         self.frames.update_T_WCs(T_WCs[pin:], unique_kf_idx[pin:])
 
     def solve_GN_calib(self):
-        K = self.K
+        K = self.frames.get_intrinsics()
         pin = self.cfg["pin"]
         unique_kf_idx = self.get_unique_kf_idx()
         n_unique_kf = unique_kf_idx.numel()

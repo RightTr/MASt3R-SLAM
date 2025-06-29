@@ -28,8 +28,10 @@ import numpy as np
 def vggt_inference_mono(model, frame):
     img = frame.img.unsqueeze(0).unsqueeze(1)
     aggregated_tokens_list, patch_start_idx = model.aggregator(img)
-    # if frame.feat is None:
-    #     frame.feat = self.feature_extractor(aggregated_tokens_list, img, patch_start_idx)
+    if frame.feat is None:
+        frame.feat = model.track_head.feature_extractor(aggregated_tokens_list, img, patch_start_idx)
+        print(frame.feat.shape)
+
     X, C = model.point_head(
                     aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
                 )

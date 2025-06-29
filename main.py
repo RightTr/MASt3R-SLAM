@@ -72,12 +72,12 @@ def relocalization(frame, keyframes, factor_graph, retrieval_database):
         return successful_loop_closure
 
 
-def run_backend(cfg, model, states, keyframes, K):
+def run_backend(cfg, model, states, keyframes):
     set_global_config(cfg)
 
     device = keyframes.device
-    factor_graph = FactorGraph(model, keyframes, K, device)
-    retrieval_database = load_retriever(model)
+    factor_graph = FactorGraph(model, keyframes, device)
+    # retrieval_database = load_retriever(model)
 
     mode = states.get_mode()
     while mode is not Mode.TERMINATED:
@@ -85,13 +85,13 @@ def run_backend(cfg, model, states, keyframes, K):
         if mode == Mode.INIT or states.is_paused():
             time.sleep(0.01)
             continue
-        if mode == Mode.RELOC:
-            frame = states.get_frame()
-            success = relocalization(frame, keyframes, factor_graph, retrieval_database)
-            if success:
-                states.set_mode(Mode.TRACKING)
-            states.dequeue_reloc()
-            continue
+        # if mode == Mode.RELOC:
+        #     frame = states.get_frame()
+        #     success = relocalization(frame, keyframes, factor_graph, retrieval_database)
+        #     if success:
+        #         states.set_mode(Mode.TRACKING)
+        #     states.dequeue_reloc()
+        #     continue
         idx = -1
         with states.lock:
             if len(states.global_optimizer_tasks) > 0:
@@ -107,18 +107,18 @@ def run_backend(cfg, model, states, keyframes, K):
         for j in range(min(n_consec, idx)):
             kf_idx.append(idx - 1 - j)
         frame = keyframes[idx]
-        retrieval_inds = retrieval_database.update(
-            frame,
-            add_after_query=True,
-            k=config["retrieval"]["k"],
-            min_thresh=config["retrieval"]["min_thresh"],
-        )
-        kf_idx += retrieval_inds
+        # retrieval_inds = retrieval_database.update(
+        #     frame,
+        #     add_after_query=True,
+        #     k=config["retrieval"]["k"],
+        #     min_thresh=config["retrieval"]["min_thresh"],
+        # )
+        # kf_idx += retrieval_inds
 
-        lc_inds = set(retrieval_inds)
-        lc_inds.discard(idx - 1)
-        if len(lc_inds) > 0:
-            print("Database retrieval", idx, ": ", lc_inds)
+        # lc_inds = set(retrieval_inds)
+        # lc_inds.discard(idx - 1)
+        # if len(lc_inds) > 0:
+        #     print("Database retrieval", idx, ": ", lc_inds)
 
         kf_idx = set(kf_idx)  # Remove duplicates by using set
         kf_idx.discard(idx)  # Remove current kf idx if included
@@ -215,6 +215,9 @@ if __name__ == "__main__":
     tracker = FrameTracker(model, keyframes, device)
     last_msg = WindowMsg()
 
+    # backend = mp.Process(target=run_backend, args=(config, model, states, keyframes))
+    # backend.start()
+
     i = 0
 
     while True:
@@ -253,15 +256,16 @@ if __name__ == "__main__":
             keyframes.append(frame)
             if use_calib:
                 keyframes.set_intrinsics(K_init)
+            states.queue_global_optimization(len(keyframes) - 1)
             states.set_mode(Mode.TRACKING)
             states.set_frame(frame)
-            i += 1
             continue
 
         if mode == Mode.TRACKING:
             add_new_kf, match_info, try_reloc, Kf = tracker.track(frame)
             states.set_frame(frame)
-            i += 1
+
+        i += 1
 
         # elif mode == Mode.RELOC:
         #     X, C = mast3r_inference_mono(model, frame)
@@ -283,6 +287,7 @@ if __name__ == "__main__":
             keyframes.append(frame)
             if use_calib:
                 keyframes.set_intrinsics(Kf)
+            states.queue_global_optimization(len(keyframes) - 1)
             # states.queue_global_optimization(len(keyframes) - 1)
             # In single threaded mode, wait for the backend to finish
         #     while config["single_thread"]:
