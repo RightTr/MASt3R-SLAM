@@ -13,7 +13,7 @@ from mast3r_slam.vggt_utils import (
     vggt_match_asymmetric, 
     closed_form_sim3, 
     match_sim3_scale,
-    match_sim3_scale_one
+    get_extri_intri_from_pose
 )
 
 import sys
@@ -49,9 +49,10 @@ class FrameTracker:
             self.model, frame, keyframe, self.idx_f2k)   
         
         img_size = frame.img.shape[-2:]
-        extrinsics, intrinsics = pose_encoding_to_extri_intri(P, img_size)
+        T_CfCk ,K = get_extri_intri_from_pose(P, img_size)
+        # extrinsics, intrinsics = pose_encoding_to_extri_intri(P, img_size)
 
-        Kf = intrinsics[0, :].squeeze(0)
+        Kf = K[0]
 
         self.idx_f2k = idx_f2k.clone()
 
@@ -71,9 +72,9 @@ class FrameTracker:
             frame, keyframe, idx_f2k, img_size, use_calib, K
         )
 
-        Qk = torch.ones_like(valid_match_k)
+        Qk = torch.ones_like(valid_match_k) 
 
-        T_CfCk = closed_form_sim3(extrinsics[:, 1]) 
+        # T_CfCk = closed_form_sim3(extrinsics[:, 1]) 
         T_CkCf = T_CfCk.inv()
         T_WCf = T_WCk * T_CkCf
 
@@ -90,7 +91,7 @@ class FrameTracker:
             return False, [], True
 
         if not use_calib:
-            T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3( # TODO: BA  
+            T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3( 
                 Xf, Xk, T_WCf, T_WCk, Qk, valid_opt
             )
         else:

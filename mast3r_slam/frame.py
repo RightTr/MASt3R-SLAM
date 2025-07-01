@@ -325,7 +325,6 @@ class SharedKeyframes:
             return idx
 
     def set_intrinsics(self, K):
-        assert config["use_calib"]
         with self.lock:
             if self.n_size.value == 0:
                 self.K[0] = K
@@ -333,7 +332,6 @@ class SharedKeyframes:
                 self.K[self.n_size.value - 1] = K
         
     def get_intrinsics(self):
-        assert config["use_calib"]
         with self.lock:
             return self.K[self.n_size.value - 1]
 

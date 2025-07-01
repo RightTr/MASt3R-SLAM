@@ -1,7 +1,7 @@
 use_calib: False
 use_stereo: False
 single_thread: False
-use_depth: False
+use_depth: True
 dataset:
   subsample: 5
   img_downsample: 1
@@ -57,4 +57,4 @@ retrieval:
 
 reloc:
   min_match_frac: 0.3
-  strict: Trues
+  strict: True

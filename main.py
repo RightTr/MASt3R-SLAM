@@ -18,8 +18,8 @@ from mast3r_slam.frame import Mode, SharedKeyframes, SharedStates, create_frame,
 from mast3r_slam.vggt_utils import (
     load_vggt,
     vggt_inference_mono,
-    get_intri_from_pose,
-    depth_to_points,
+    depth_to_pointmap,
+    get_extri_intri_from_pose,
     )
 from mast3r_slam.multiprocess_utils import new_queue, try_get_msg
 from mast3r_slam.tracker import FrameTracker
@@ -254,8 +254,8 @@ if __name__ == "__main__":
         if mode == Mode.INIT:
             if config['use_depth']:
                 D_init, C_init, P_init = vggt_inference_mono(model, frame)
-                K_init = get_intri_from_pose(P_init, frame.img.shape)
-                X_init = depth_to_points(D_init, K_init)
+                _, K_init = get_extri_intri_from_pose(P_init, frame.img.shape[-2:])
+                X_init, C_init = depth_to_pointmap(D_init, C_init, K_init, if_init=True)
                 frame.update_pointmap(X_init, C_init)
                 keyframes.append(frame)
                 keyframes.set_intrinsics(K_init)
@@ -264,7 +264,7 @@ if __name__ == "__main__":
                 frame.update_pointmap(X_init, C_init)
                 keyframes.append(frame)
                 if use_calib:
-                    K_init = get_intri_from_pose(P_init, frame.img.shape)
+                    _, K_init = get_extri_intri_from_pose(P_init, frame.img.shape)
                     keyframes.set_intrinsics(K_init)
             states.queue_global_optimization(len(keyframes) - 1)
             states.set_mode(Mode.TRACKING)
