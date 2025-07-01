@@ -19,6 +19,7 @@ from scipy.spatial.transform import Rotation as R_scipy
 import mast3r_slam.matching as matching
 from PIL import Image
 from PIL import ImageOps
+from mast3r_slam.config import config
 
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
@@ -31,18 +32,22 @@ def vggt_inference_mono(model, frame):
     if frame.feat is None:
         frame.feat = model.track_head.feature_extractor(aggregated_tokens_list, img, patch_start_idx)
         print(frame.feat.shape)
-
-    X, C = model.point_head(
-                    aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
-                )
-    P = model.camera_head(aggregated_tokens_list)[-1]
-    img_size = frame.img.shape[-2:]
-    extrinsic, intrinsic = pose_encoding_to_extri_intri(P, img_size) 
     
-    Xii = einops.rearrange(X[0, 0], "h w c -> (h w) c")
-    Cii = einops.rearrange(C[0, 0], "h w -> (h w) 1")
-
-    return Xii, Cii, intrinsic[:, 0].squeeze(0)
+    P = model.camera_head(aggregated_tokens_list)[-1]
+    if config['use_depth']:
+        D, C = model.depth_head(
+                        aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
+                    )
+        Dii = einops.rearrange(D[0, 0], "h w c -> (h w) 1")
+        Cii = einops.rearrange(C[0, 0], "h w -> (h w) 1")
+        return Dii, Cii, P
+    else:
+        X, C = model.point_head(
+                        aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
+                    )
+        Xii = einops.rearrange(X[0, 0], "h w c -> (h w) c")
+        Cii = einops.rearrange(C[0, 0], "h w -> (h w) 1")
+        return Xii, Cii, P
     
 @torch.inference_mode
 def vggt_asymmetric_inference(model, frame_i, frame_j):
@@ -59,20 +64,38 @@ def vggt_asymmetric_inference(model, frame_i, frame_j):
     #     frame_i.feat = feats[:, 0]
 
     P = model.camera_head(aggregated_tokens_list)[-1]
+    if config['use_depth']:
+        D, C = model.depth_head(
+                        aggregated_tokens_list, images=imgs, patch_start_idx=patch_start_idx
+                    )
+        Dii = D[:, 0]
+        Dij = D[:, 1]
+        Cii = C[:, 0]
+        Cij = C[:, 1]
+        return P, Dii, Dij, Cii, Cij
     
-    X, C = model.point_head(
-                    aggregated_tokens_list, imgs, patch_start_idx=patch_start_idx
-                )
-    Xii = X[:, 0]
-    Xij = X[:, 1]
-    Cii = C[:, 0]
-    Cij = C[:, 1]
-
-    return P, Xii, Xij, Cii, Cij
+    else:
+        X, C = model.point_head(
+                        aggregated_tokens_list, imgs, patch_start_idx=patch_start_idx
+                    )
+        Xii = X[:, 0]
+        Xij = X[:, 1]
+        Cii = C[:, 0]
+        Cij = C[:, 1]
+        return P, Xii, Xij, Cii, Cij
 
 def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
-    P, Xii, Xij, Cii, Cij = vggt_asymmetric_inference(model, frame_i, frame_j)
+    if config['use_depth']:
+        P, Xii, Xij, Cii, Cij = vggt_asymmetric_inference(model, frame_i, frame_j)
 
+    else:
+        P, Dii, Dij, Cii, Cij = vggt_asymmetric_inference(model, frame_i, frame_j)
+        img_size = frame_i.img.shape
+        K = get_intri_from_pose(P, img_size)
+        Ki, Kj = K[0], K[1]
+        Xii = depth_to_points(Dii, Ki)
+        Xij = depth_to_points(Dij, Kj)
+        
     idx_i2j, valid_match_j = matching.mymatch_iterative_proj(
         Xii, Xij, P, idx_i_to_j_init=idx_i2j_init
     )
@@ -187,3 +210,19 @@ def match_sim3_scale_one(T_src: lietorch.Sim3) -> lietorch.Sim3:
     log_src = T_src.log()
     log_src[..., 6] = 0
     return lietorch.Sim3.exp(log_src)
+
+def get_intri_from_pose(P, img_size):
+    _, intrinsics = pose_encoding_to_extri_intri(P, img_size) 
+    return intrinsics.squeeze(0)
+
+def depth_to_points(D, K):
+    b, h, w = D.shape[:3]
+    u = torch.arange(w).view(1, 1, w).expand(b, h, w)
+    v = torch.arange(h).view(1, h, 1).expand(b, h, w)
+    ones = torch.ones_like(u)
+    pix = torch.stack((u, v, ones), dim=-1).float() 
+    pix = pix.view(b, h, w, 3, 1)
+    K_inv = torch.inverse(K).view(1, 1, 1, 3, 3)
+    K_inv = K_inv.expand(b, h, w, 3, 3)
+    X = torch.matmul(K_inv, pix) * D.unsqueeze(-1)
+    return X.squeeze(-1)

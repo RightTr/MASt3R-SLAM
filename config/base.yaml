@@ -1,6 +1,7 @@
 use_calib: False
 use_stereo: False
 single_thread: False
+use_depth: False
 dataset:
   subsample: 5
   img_downsample: 1

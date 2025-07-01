@@ -18,6 +18,8 @@ from mast3r_slam.frame import Mode, SharedKeyframes, SharedStates, create_frame,
 from mast3r_slam.vggt_utils import (
     load_vggt,
     vggt_inference_mono,
+    get_intri_from_pose,
+    depth_to_points,
     )
 from mast3r_slam.multiprocess_utils import new_queue, try_get_msg
 from mast3r_slam.tracker import FrameTracker
@@ -242,7 +244,6 @@ if __name__ == "__main__":
 
         timestamp, img = dataset[i]
 
-        # get frames last camera pose
         T_WC = (
             lietorch.Sim3.Identity(1, device=device)
             if i == 0
@@ -251,11 +252,20 @@ if __name__ == "__main__":
         frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
 
         if mode == Mode.INIT:
-            X_init, C_init, K_init = vggt_inference_mono(model, frame)
-            frame.update_pointmap(X_init, C_init)
-            keyframes.append(frame)
-            if use_calib:
+            if config['use_depth']:
+                D_init, C_init, P_init = vggt_inference_mono(model, frame)
+                K_init = get_intri_from_pose(P_init, frame.img.shape)
+                X_init = depth_to_points(D_init, K_init)
+                frame.update_pointmap(X_init, C_init)
+                keyframes.append(frame)
                 keyframes.set_intrinsics(K_init)
+            else:
+                X_init, C_init, P_init = vggt_inference_mono(model, frame)
+                frame.update_pointmap(X_init, C_init)
+                keyframes.append(frame)
+                if use_calib:
+                    K_init = get_intri_from_pose(P_init, frame.img.shape)
+                    keyframes.set_intrinsics(K_init)
             states.queue_global_optimization(len(keyframes) - 1)
             states.set_mode(Mode.TRACKING)
             states.set_frame(frame)

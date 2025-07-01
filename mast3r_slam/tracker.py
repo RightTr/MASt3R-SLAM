@@ -37,7 +37,6 @@ class FrameTracker:
         self.device = device
 
         self.reset_idx_f2k()
-        self.count = 1
 
     # Initialize with identity indexing of size (1,n)
     def reset_idx_f2k(self):
@@ -107,20 +106,13 @@ class FrameTracker:
                 K,
                 img_size,
             )
-        if self.count >= 2:
-            T_WCk_last = self.keyframes[len(self.keyframes) - 2].T_WC
-            T_CkCf = match_sim3_scale(T_CkCf, T_WCk_last)
-            T_WCf = match_sim3_scale(T_WCf, T_WCk_last)
-            frame.T_WC = T_WCf
-            Xkk = T_CkCf.act(Xfk)
-            keyframe.update_pointmap(Xkk, Cfk)
-        else:
-            T_WCk_last = self.keyframes[len(self.keyframes) - 1].T_WC
-            T_CkCf = match_sim3_scale(T_CkCf, T_WCk_last)
-            T_WCf = match_sim3_scale(T_WCf, T_WCk_last)
-            frame.T_WC = T_WCf
-            Xkk = T_CkCf.act(Xfk)
-            keyframe.update_pointmap(Xkk, Cfk)
+
+        T_WCk_last = self.keyframes[0].T_WC
+        T_CkCf = match_sim3_scale(T_CkCf, T_WCk_last)
+        T_WCf = match_sim3_scale(T_WCf, T_WCk_last)
+        frame.T_WC = T_WCf
+        Xkk = T_CkCf.act(Xfk)
+        keyframe.update_pointmap(Xkk, Cfk)
 
         print(T_WCf.data)
         self.keyframes[len(self.keyframes) - 1] = keyframe
@@ -135,7 +127,6 @@ class FrameTracker:
 
         if new_kf:
             self.reset_idx_f2k()
-            self.count += 1
 
         return (
             new_kf,
@@ -151,8 +142,6 @@ class FrameTracker:
         
     def track_nk(self, frame_i: Frame, frame_j: Frame): # Track with no keyframe
         T_CiCj, Xii, Xij, Cii, Cij = vggt_match_asymmetric(self.model, frame_i, frame_j)
-        
-        img_size = frame_i.img.shape[-2:]
 
         frame_i.update_pointmap(Xii, Cii)
 
