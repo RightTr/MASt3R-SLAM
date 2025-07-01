@@ -9,7 +9,12 @@ from mast3r_slam.geometry import (
 )
 from mast3r_slam.nonlinear_optimizer import check_convergence, huber
 from mast3r_slam.config import config
-from mast3r_slam.vggt_utils import vggt_match_asymmetric
+from mast3r_slam.vggt_utils import (
+    vggt_match_asymmetric, 
+    closed_form_sim3, 
+    match_sim3_scale,
+    match_sim3_scale_one
+)
 
 import sys
 import os.path as path
@@ -32,6 +37,7 @@ class FrameTracker:
         self.device = device
 
         self.reset_idx_f2k()
+        self.count = 1
 
     # Initialize with identity indexing of size (1,n)
     def reset_idx_f2k(self):
@@ -40,10 +46,13 @@ class FrameTracker:
     def track(self, frame: Frame):
         keyframe = self.keyframes.last_keyframe()
         
-        idx_f2k, valid_match_k, T_CkCf, Xff, Cff, Xfk, Ckf, K = vggt_match_asymmetric(
+        idx_f2k, valid_match_k, P, Xff, Cff, Xfk, Cfk = vggt_match_asymmetric(
             self.model, frame, keyframe, self.idx_f2k)   
         
-        Kf = K[1, :]
+        img_size = frame.img.shape[-2:]
+        extrinsics, intrinsics = pose_encoding_to_extri_intri(P, img_size)
+
+        Kf = intrinsics[0, :].squeeze(0)
 
         self.idx_f2k = idx_f2k.clone()
 
@@ -53,7 +62,6 @@ class FrameTracker:
         idx_f2k = idx_f2k[0]
 
         use_calib = config["use_calib"]
-        img_size = frame.img.shape[-2:]
 
         if use_calib:
             K = self.keyframes.get_intrinsics()
@@ -66,6 +74,8 @@ class FrameTracker:
 
         Qk = torch.ones_like(valid_match_k)
 
+        T_CfCk = closed_form_sim3(extrinsics[:, 1]) 
+        T_CkCf = T_CfCk.inv()
         T_WCf = T_WCk * T_CkCf
 
         valid_Cf = Cf > self.cfg["C_conf"]
@@ -97,15 +107,21 @@ class FrameTracker:
                 K,
                 img_size,
             )
-        
-        frame.T_WC = T_WCf
+        if self.count >= 2:
+            T_WCk_last = self.keyframes[len(self.keyframes) - 2].T_WC
+            T_CfCk = T_CkCf.inv()
+            T_CfCk = match_sim3_scale(T_CfCk, T_WCk_last)
+            T_WCf = match_sim3_scale(T_WCf, T_WCk_last)
+            frame.T_WC = T_WCf
+            Xkk = T_CfCk.act(Xfk)
+            keyframe.update_pointmap(Xkk, Cfk)
+        else:
+            frame.T_WC = T_WCf
+            T_CfCk = T_CkCf.inv()
+            Xkk = T_CfCk.act(Xfk)
+            keyframe.update_pointmap(Xkk, Cfk)
 
         print(T_WCf.data)
-
-        T_CfCk = T_CkCf.inv()
-        Xkk = T_CfCk.act(Xfk)
-        keyframe.update_pointmap(Xkk, Ckf)
-
         self.keyframes[len(self.keyframes) - 1] = keyframe
 
         n_valid = valid_kf.sum()
@@ -116,9 +132,9 @@ class FrameTracker:
 
         new_kf = min(match_frac_k, unique_frac_f) < self.cfg["match_frac_thresh"]
 
-
         if new_kf:
             self.reset_idx_f2k()
+            self.count += 1
 
         return (
             new_kf,

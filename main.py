@@ -169,7 +169,7 @@ if __name__ == "__main__":
     viz2main = new_queue(manager, args.no_viz)
 
     dataset = load_dataset(args.dataset)
-    # dataset.subsample(config["dataset"]["subsample"])
+    dataset.subsample(config["dataset"]["subsample"])
     h, w, _, _= dataset.get_img_shape()
 
     if args.calib:
@@ -215,8 +215,8 @@ if __name__ == "__main__":
     tracker = FrameTracker(model, keyframes, device)
     last_msg = WindowMsg()
 
-    # backend = mp.Process(target=run_backend, args=(config, model, states, keyframes))
-    # backend.start()
+    backend = mp.Process(target=run_backend, args=(config, model, states, keyframes))
+    backend.start()
 
     i = 0
 
@@ -316,6 +316,6 @@ if __name__ == "__main__":
     #     eval.evaluate(save_dir, dataset.poses, keyframes)
 
     print("done")
-    # backend.join()
+    backend.join()
     if not args.no_viz:
         viz.join()

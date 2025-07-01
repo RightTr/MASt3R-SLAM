@@ -48,7 +48,6 @@ def vggt_inference_mono(model, frame):
 def vggt_asymmetric_inference(model, frame_i, frame_j):
     img_i = frame_i.img.unsqueeze(0).unsqueeze(1)
     img_j = frame_j.img.unsqueeze(0).unsqueeze(1)
-    img_size = frame_i.img.shape[-2:]
     imgs = torch.cat([img_i, img_j], dim=1)
     aggregated_tokens_list, patch_start_idx = model.aggregator(imgs)
     # if frame_i.feat is None:
@@ -60,10 +59,6 @@ def vggt_asymmetric_inference(model, frame_i, frame_j):
     #     frame_i.feat = feats[:, 0]
 
     P = model.camera_head(aggregated_tokens_list)[-1]
-
-    extrinsics, intrinsics = pose_encoding_to_extri_intri(P, img_size) 
-
-    T_CiCj = closed_form_sim3(extrinsics[:, 1]) 
     
     X, C = model.point_head(
                     aggregated_tokens_list, imgs, patch_start_idx=patch_start_idx
@@ -73,41 +68,21 @@ def vggt_asymmetric_inference(model, frame_i, frame_j):
     Cii = C[:, 0]
     Cij = C[:, 1]
 
-    return T_CiCj, Xii, Xij, Cii, Cij, intrinsics.squeeze(0)
+    return P, Xii, Xij, Cii, Cij
 
 def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
-    TCiCj, Xii, Xij, Cii, Cij, K = vggt_asymmetric_inference(model, frame_i, frame_j)
+    P, Xii, Xij, Cii, Cij = vggt_asymmetric_inference(model, frame_i, frame_j)
 
     idx_i2j, valid_match_j = matching.mymatch_iterative_proj(
-        Xii, Xij, TCiCj, idx_i_to_j_init=idx_i2j_init
+        Xii, Xij, P, idx_i_to_j_init=idx_i2j_init
     )
 
     Xii = einops.rearrange(Xii[0, :], "h w c -> (h w) c")
     Cii = einops.rearrange(Cii[0, :], "h w -> (h w) 1")
     Xij = einops.rearrange(Xij[0, :], "h w c -> (h w) c")
     Cij = einops.rearrange(Cij[0, :], "h w -> (h w) 1")
-
-
-    # a, c = Xii.shape
-    # assert c == 3, "Each point must have 3 coordinates (x, y, z)"
-
-    # points = Xii.cpu().numpy()
-    # finite_mask = np.isfinite(points).all(axis=1)
-    # positive_z = points[:, 2] > 0
-    # valid = finite_mask & positive_z
-    # points = points[valid]
-
-    # with open("/home/pi/Documents/Right/MASt3R-SLAM/temp/Xii_points.ply", 'w') as f:
-    #     f.write(f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n")
-    #     f.write("property float x\nproperty float y\nproperty float z\n")
-    #     f.write("property uchar red\nproperty uchar green\nproperty uchar blue\n")
-    #     f.write("end_header\n")
-    #     for p in points:
-    #         f.write(f"{p[0]} {p[1]} {p[2]} 255 255 255\n")
-
-    # print(f"✅ Saved {len(points)} point{'s' if len(points) != 1 else ''}")
     
-    return idx_i2j, valid_match_j, TCiCj, Xii, Cii, Xij, Cij, K
+    return idx_i2j, valid_match_j, P, Xii, Cii, Xij, Cij
 
 def closed_form_sim3(se3, scale = 1.0, R=None, t=None):
     if se3.shape[-2:] == (3, 4):  # expand to 4x4 if needed
@@ -157,29 +132,23 @@ def resize_img(img, return_transformation=False, mode="crop"):
     width0, height0 = img.size
 
     if mode == "pad":
-        # Make the largest dimension 518px while maintaining aspect ratio
         if width0 >= height0:
             new_width = target_size
-            new_height = round(height0 * (new_width / width0) / 14) * 14  # Make divisible by 14
+            new_height = round(height0 * (new_width / width0) / 14) * 14 
         else:
             new_height = target_size
-            new_width = round(width0 * (new_height / height0) / 14) * 14  # Make divisible by 14
-    else:  # mode == "crop"
-        # Original behavior: set width to 518px
+            new_width = round(width0 * (new_height / height0) / 14) * 14 
+    else:  
         new_width = target_size
-        # Calculate height maintaining aspect ratio, divisible by 14
         new_height = round(height0 * (new_width / width0) / 14) * 14
 
-    # Resize with new dimensions (width, height)
     img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
     width, height = img.size
 
-    # Center crop height if it's larger than 518 (only in crop mode)
     if mode == "crop" and new_height > target_size:
         start_y = (new_height - target_size) // 2
         img = img.crop((0, start_y, width, start_y + target_size))
 
-    # For pad mode, pad to make a square of target_size x target_size
     if mode == "pad":
         h_padding = target_size - img.shape[1]
         w_padding = target_size - img.shape[2]
@@ -190,10 +159,9 @@ def resize_img(img, return_transformation=False, mode="crop"):
             pad_left = w_padding // 2
             pad_right = w_padding - pad_left
 
-            # Pad with white (value=1.0)
             img = ImageOps.expand(img, border=(pad_left, pad_top, pad_right, pad_bottom), fill=255)
     
-    img = np.asarray(img).astype(np.float32) # (h, w, c) unnormalized
+    img = np.asarray(img).astype(np.float32)
 
     res = dict(
         img=torch.from_numpy(img).permute(2, 0, 1) / 255.0, # (b, c, h, w)
@@ -209,3 +177,13 @@ def resize_img(img, return_transformation=False, mode="crop"):
         return res, (scale_w, scale_h, half_crop_w, half_crop_h)
     
     return res
+
+def match_sim3_scale(T_src: lietorch.Sim3, T_target: lietorch.Sim3) -> lietorch.Sim3:
+    log_src = T_src.log()
+    log_src[..., 6] = T_target.log()[..., 6]
+    return lietorch.Sim3.exp(log_src)
+
+def match_sim3_scale_one(T_src: lietorch.Sim3) -> lietorch.Sim3:
+    log_src = T_src.log()
+    log_src[..., 6] = 0
+    return lietorch.Sim3.exp(log_src)

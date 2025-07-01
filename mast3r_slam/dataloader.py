@@ -182,8 +182,8 @@ class RRXIODataset(MonocularDataset):
         self.frame_rate = 30
         self.rgb_files = []
         self.poses = []
-        imgs_data = np.loadtxt(os.path.join(self.dataset_path, "thermal_undistort.txt"), delimiter=" ", dtype=np.unicode_)
-        poses_data = np.loadtxt(os.path.join(self.dataset_path, "gt_thermal.txt"), delimiter=" ", dtype=np.unicode_, skiprows=1)
+        imgs_data = np.loadtxt(os.path.join(self.dataset_path, "visual.txt"), delimiter=" ", dtype=np.unicode_)
+        poses_data = np.loadtxt(os.path.join(self.dataset_path, "gt_visual.txt"), delimiter=" ", dtype=np.unicode_, skiprows=1)
         calib = np.array([334.19639643, 334.26241379, 318.48142004, 250.56663663, 0, 0, 0, 0, 0])
         W, H = 640, 512
         self.camera_intrinsics = Intrinsics.from_calib(self.img_size, W, H, calib)
@@ -294,7 +294,7 @@ class NTU4DRadLMDataset(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
-        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "thermal/*.png")))
+        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "RGB/*.png")))
         self.n_img = len(self.rgb_files)
         self.poses = []
         # self.poses = self.load_poses(os.path.join(self.dataset_path, "gt_thermal.txt"))
