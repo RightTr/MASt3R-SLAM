@@ -34,7 +34,6 @@ class MonocularDataset(torch.utils.data.Dataset):
         return len(self.rgb_files)
 
     def __getitem__(self, idx):
-        # Call get_image before timestamp for realsense camera
         img = self.get_image(idx)
         timestamp = self.get_timestamp(idx)
         return timestamp, img
@@ -54,7 +53,6 @@ class MonocularDataset(torch.utils.data.Dataset):
 
     def get_img_shape(self):
         img = self.read_img(0)
-        print(img.shape)
         w_raw, h_raw = img.shape[1], img.shape[0]
         img = resize_img(img)
         return img['img'][0].shape[0], img['img'][0].shape[1], w_raw, h_raw

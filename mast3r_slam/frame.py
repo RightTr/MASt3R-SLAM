@@ -114,10 +114,10 @@ class FramePair:
 
 def create_frame(i, img, T_WC, img_size=512, device="cuda:0"):
     img = resize_img(img)
-    rgb = img["img"].to(device=device) # (b, c, h, w)
+    rgb = img["img"].to(device=device) # (c, h, w)
     img_shape = torch.tensor(img["true_shape"], device=device)
     img_true_shape = img_shape.clone()
-    uimg = torch.from_numpy(img["unnormalized_img"]).to(device=device)
+    uimg = torch.from_numpy(img["unnormalized_img"]).to(device=device) / 255.0 # TODO: Why divided by 255?
     downsample = config["dataset"]["img_downsample"]
     if downsample > 1:
         uimg = uimg[::downsample, ::downsample]

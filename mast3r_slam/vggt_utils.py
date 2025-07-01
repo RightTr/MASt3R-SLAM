@@ -196,7 +196,7 @@ def resize_img(img, return_transformation=False, mode="crop"):
     img = np.asarray(img).astype(np.float32)
 
     res = dict(
-        img=torch.from_numpy(img).permute(2, 0, 1) / 255.0, # (b, c, h, w)
+        img=torch.from_numpy(img).permute(2, 0, 1) / 255.0, # (c, h, w)
         true_shape = np.int32(img.shape[:2][::-1]), # (w, h)
         unnormalized_img = img,
     )
