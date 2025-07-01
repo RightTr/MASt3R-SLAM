@@ -109,16 +109,17 @@ class FrameTracker:
             )
         if self.count >= 2:
             T_WCk_last = self.keyframes[len(self.keyframes) - 2].T_WC
-            T_CfCk = T_CkCf.inv()
-            T_CfCk = match_sim3_scale(T_CfCk, T_WCk_last)
+            T_CkCf = match_sim3_scale(T_CkCf, T_WCk_last)
             T_WCf = match_sim3_scale(T_WCf, T_WCk_last)
             frame.T_WC = T_WCf
-            Xkk = T_CfCk.act(Xfk)
+            Xkk = T_CkCf.act(Xfk)
             keyframe.update_pointmap(Xkk, Cfk)
         else:
+            T_WCk_last = self.keyframes[len(self.keyframes) - 1].T_WC
+            T_CkCf = match_sim3_scale(T_CkCf, T_WCk_last)
+            T_WCf = match_sim3_scale(T_WCf, T_WCk_last)
             frame.T_WC = T_WCf
-            T_CfCk = T_CkCf.inv()
-            Xkk = T_CfCk.act(Xfk)
+            Xkk = T_CkCf.act(Xfk)
             keyframe.update_pointmap(Xkk, Cfk)
 
         print(T_WCf.data)
