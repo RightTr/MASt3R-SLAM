@@ -25,7 +25,6 @@ from mast3r_slam.multiprocess_utils import new_queue, try_get_msg
 from mast3r_slam.tracker import FrameTracker
 from mast3r_slam.visualization import WindowMsg, run_visualization
 import torch.multiprocessing as mp
-import os
 
 
 def relocalization(frame, keyframes, factor_graph, retrieval_database):
@@ -122,6 +121,7 @@ def run_backend(cfg, model, states, keyframes):
         # if len(lc_inds) > 0:
         #     print("Database retrieval", idx, ": ", lc_inds)
 
+        print('hello')
         kf_idx = set(kf_idx)  # Remove duplicates by using set
         kf_idx.discard(idx)  # Remove current kf idx if included
         kf_idx = list(kf_idx)  # convert to list
@@ -224,8 +224,8 @@ if __name__ == "__main__":
 
     while True:
         mode = states.get_mode()
-        # msg = try_get_msg(viz2main)
-        # last_msg = msg if msg is not None else last_msg
+        msg = try_get_msg(viz2main)
+        last_msg = msg if msg is not None else last_msg
         if last_msg.is_terminated:
             states.set_mode(Mode.TERMINATED)
             break
@@ -298,7 +298,6 @@ if __name__ == "__main__":
             if use_calib:
                 keyframes.set_intrinsics(Kf)
             states.queue_global_optimization(len(keyframes) - 1)
-            # states.queue_global_optimization(len(keyframes) - 1)
             # In single threaded mode, wait for the backend to finish
         #     while config["single_thread"]:
         #         with states.lock:

@@ -5,7 +5,7 @@ from mast3r_slam.frame import SharedKeyframes
 from mast3r_slam.geometry import (
     constrain_points_to_ray,
 )
-from mast3r_slam.mast3r_utils import mast3r_match_symmetric
+from mast3r_slam.vggt_utils import vggt_match_symmetric
 import mast3r_slam_backends
 
 
@@ -29,12 +29,12 @@ class FactorGraph:
     def add_factors(self, ii, jj, min_match_frac, is_reloc=False):
         kf_ii = [self.frames[idx] for idx in ii]
         kf_jj = [self.frames[idx] for idx in jj]
-        feat_i = torch.cat([kf_i.feat for kf_i in kf_ii])
-        feat_j = torch.cat([kf_j.feat for kf_j in kf_jj])
-        pos_i = torch.cat([kf_i.pos for kf_i in kf_ii])
-        pos_j = torch.cat([kf_j.pos for kf_j in kf_jj])
-        shape_i = [kf_i.img_true_shape for kf_i in kf_ii]
-        shape_j = [kf_j.img_true_shape for kf_j in kf_jj]
+        # feat_i = torch.cat([kf_i.feat for kf_i in kf_ii])
+        # feat_j = torch.cat([kf_j.feat for kf_j in kf_jj])
+        # pos_i = torch.cat([kf_i.pos for kf_i in kf_ii])
+        # pos_j = torch.cat([kf_j.pos for kf_j in kf_jj])
+        # shape_i = [kf_i.img_true_shape for kf_i in kf_ii]
+        # shape_j = [kf_j.img_true_shape for kf_j in kf_jj]
 
         (
             idx_i2j,
@@ -45,8 +45,8 @@ class FactorGraph:
             Qjj,
             Qji,
             Qij,
-        ) = mast3r_match_symmetric(
-            self.model, feat_i, pos_i, feat_j, pos_j, shape_i, shape_j
+        ) = vggt_match_symmetric(
+            self.model, kf_ii, kf_jj, 
         )
 
         batch_inds = torch.arange(idx_i2j.shape[0], device=idx_i2j.device)[
@@ -55,10 +55,8 @@ class FactorGraph:
         Qj = torch.sqrt(Qii[batch_inds, idx_i2j] * Qji)
         Qi = torch.sqrt(Qjj[batch_inds, idx_j2i] * Qij)
 
-        valid_Qj = Qj > self.cfg["Q_conf"]
-        valid_Qi = Qi > self.cfg["Q_conf"]
-        valid_j = valid_match_j & valid_Qj
-        valid_i = valid_match_i & valid_Qi
+        valid_j = valid_match_j
+        valid_i = valid_match_i
         nj = valid_j.shape[1] * valid_j.shape[2]
         ni = valid_i.shape[1] * valid_i.shape[2]
         match_frac_j = valid_j.sum(dim=(1, 2)) / nj

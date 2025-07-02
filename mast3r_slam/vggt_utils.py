@@ -27,7 +27,7 @@ import numpy as np
 
 @torch.inference_mode
 def vggt_inference_mono(model, frame):
-    img = frame.img.unsqueeze(0).unsqueeze(1)
+    img = img_to_imgbschw(frame.img)
     aggregated_tokens_list, patch_start_idx = model.aggregator(img)
     if frame.feat is None:
         frame.feat = model.track_head.feature_extractor(aggregated_tokens_list, img, patch_start_idx)
@@ -35,8 +35,8 @@ def vggt_inference_mono(model, frame):
     P = model.camera_head(aggregated_tokens_list)[-1]
     if config['use_depth']:
         D, C = model.depth_head(
-                        aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
-                    )
+                    aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
+                )
         Dii = D[:, 0]
         Cii = C[:, 0]
         return Dii, Cii, P
@@ -50,8 +50,8 @@ def vggt_inference_mono(model, frame):
     
 @torch.inference_mode
 def vggt_asymmetric_inference(model, frame_i, frame_j):
-    img_i = frame_i.img.unsqueeze(0).unsqueeze(1)
-    img_j = frame_j.img.unsqueeze(0).unsqueeze(1)
+    img_i = img_to_imgbschw(frame_i.img)
+    img_j = img_to_imgbschw(frame_j.img)
     imgs = torch.cat([img_i, img_j], dim=1)
     aggregated_tokens_list, patch_start_idx = model.aggregator(imgs)
     # if frame_i.feat is None:
@@ -65,8 +65,8 @@ def vggt_asymmetric_inference(model, frame_i, frame_j):
     P = model.camera_head(aggregated_tokens_list)[-1]
     if config['use_depth']:
         D, C = model.depth_head(
-                        aggregated_tokens_list, images=imgs, patch_start_idx=patch_start_idx
-                    )
+                    aggregated_tokens_list, images=imgs, patch_start_idx=patch_start_idx
+                )
         Dii = D[:, 0]
         Dij = D[:, 1]
         Cii = C[:, 0]
@@ -75,8 +75,8 @@ def vggt_asymmetric_inference(model, frame_i, frame_j):
     
     else:
         X, C = model.point_head(
-                        aggregated_tokens_list, imgs, patch_start_idx=patch_start_idx
-                    )
+                    aggregated_tokens_list, imgs, patch_start_idx=patch_start_idx
+                )
         Xii = X[:, 0]
         Xij = X[:, 1]
         Cii = C[:, 0]
@@ -99,15 +99,15 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
         Xij = Tji.act(Xjj)
         Xij = Xij.view(1, h, w, c)
         idx_i2j, valid_match_j = matching.mymatch_iterative_proj(
-            Xii, Xij, P, idx_i_to_j_init=idx_i2j_init
-        )
+            Xii, Xij, idx_i_to_j_init=idx_i2j_init
+            )
 
     else:
         P, Xii, Xij, Cii, Cij = vggt_asymmetric_inference(model, frame_i, frame_j)
 
         idx_i2j, valid_match_j = matching.mymatch_iterative_proj(
-            Xii, Xij, P, idx_i_to_j_init=idx_i2j_init
-        )
+            Xii, Xij, idx_i_to_j_init=idx_i2j_init
+            )
 
     Xii = einops.rearrange(Xii[0, :], "h w c -> (h w) c")
     Cii = einops.rearrange(Cii[0, :], "h w -> (h w) 1")
@@ -115,6 +115,82 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
     Cij = einops.rearrange(Cij[0, :], "h w -> (h w) 1")
 
     return idx_i2j, valid_match_j, P, Xii, Cii, Xij, Cij
+
+
+@torch.inference_mode
+def vggt_symmmetric_inference(model, frame_i, frame_j):
+    S = len(frame_i)
+    X, C = [], []
+    for s in range(S):
+        img_i = img_to_imgbschw(frame_i[s].img)
+        img_j = img_to_imgbschw(frame_j[s].img)
+        imgs_ij = torch.cat([img_i, img_j], dim=1)
+        imgs_ji = torch.cat([img_j, img_i], dim=1)
+        if config['use_depth']:
+            aggregated_tokens_list, patch_start_idx = model.aggregator(imgs_ij)
+
+
+        else:
+            aggregated_tokens_list_ij, patch_start_idx_ij = model.aggregator(imgs_ij)
+            aggregated_tokens_list_ji, patch_start_idx_ji = model.aggregator(imgs_ji)
+            Xiijj, Ciijj = model.point_head(
+                        aggregated_tokens_list_ij, imgs_ij, patch_start_idx=patch_start_idx_ij
+                    )
+            Xjjii, Cjjii = model.point_head(
+                    aggregated_tokens_list_ji, imgs_ji, patch_start_idx=patch_start_idx_ji
+                )
+            Xii, Xij, Xjj, Xji = Xiijj[0, 0], Xiijj[0, 1], Xjjii[0, 0], Xjjii[0, 1] # (h, w, c)
+            Cii, Cij, Cjj, Cji = Ciijj[0, 0], Ciijj[0, 1], Cjjii[0, 0], Cjjii[0, 1] # (h, w)
+
+        X.append(torch.stack([Xii, Xji, Xjj, Xij], dim=0))
+        C.append(torch.stack([Cii, Cji, Cjj, Cij], dim=0))
+
+    X = torch.stack(X, dim=1)  
+    C = torch.stack(C, dim=1)  
+
+    return X, C
+
+def vggt_match_symmetric(model, frame_i, frame_j, idx_i2j_init=None):
+    if config['use_depth']:
+        vggt_asymmetric_inference(model, frame_i, frame_j)
+
+
+    else:
+        X, C = vggt_symmmetric_inference(model, frame_i, frame_j)
+
+        b = X.shape[1]
+
+        Xii, Xji, Xjj, Xij = X[0], X[1], X[2], X[3]
+        Cii, Cji, Cjj, Cij = C[0], C[1], C[2], C[3]
+     
+        X11 = torch.cat([Xii, Xjj], dim=0)
+        X21 = torch.cat([Xji, Xij], dim=0)
+
+        idx_1_to_2, valid_match_2 = matching.mymatch_iterative_proj(
+            X11, X21
+            )
+        
+        Qii = torch.ones_like(Cii)
+        Qji = torch.ones_like(Cii)
+        Qjj = torch.ones_like(Cii)
+        Qij = torch.ones_like(Cii)
+
+        match_b = X11.shape[0] // 2
+        idx_i2j = idx_1_to_2[:match_b]
+        idx_j2i = idx_1_to_2[match_b:]
+        valid_match_j = valid_match_2[:match_b]
+        valid_match_i = valid_match_2[match_b:]
+
+        return (
+            idx_i2j,
+            idx_j2i,
+            valid_match_j,
+            valid_match_i,
+            Qii.view(b, -1, 1),
+            Qjj.view(b, -1, 1),
+            Qji.view(b, -1, 1),
+            Qij.view(b, -1, 1),
+        )
 
 def closed_form_sim3(se3, scale = 1.0, R=None, t=None):
     if se3.shape[-2:] == (3, 4):  # expand to 4x4 if needed
@@ -227,7 +303,6 @@ def get_extri_intri_from_pose(P, img_size):
     else:
         return closed_form_sim3(extrinsics[:, 1]), intrinsics.squeeze(0)
 
-
 def depth_to_pointmap(D, C, K, if_init = False, device='cuda:0'):
     b, h, w = D.shape[:3]
     u = torch.arange(w, device=device).view(1, 1, w).expand(b, h, w)
@@ -245,4 +320,9 @@ def depth_to_pointmap(D, C, K, if_init = False, device='cuda:0'):
     else:
         return X.squeeze(-1), C
     
-
+def img_to_imgbschw(img):
+    if len(img.shape) == 3:
+        img = img.unsqueeze(0)
+    if len(img.shape) == 4:
+        img = img.unsqueeze(1)
+    return img

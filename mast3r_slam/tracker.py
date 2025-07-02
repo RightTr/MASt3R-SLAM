@@ -72,7 +72,7 @@ class FrameTracker:
             frame, keyframe, idx_f2k, img_size, use_calib, K
         )
 
-        Qk = torch.ones_like(valid_match_k) 
+        Qk = torch.ones_like(valid_match_k) # TODO: Info matrix
 
         # T_CfCk = closed_form_sim3(extrinsics[:, 1]) 
         T_CkCf = T_CfCk.inv()
