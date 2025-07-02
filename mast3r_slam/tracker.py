@@ -11,22 +11,11 @@ from mast3r_slam.nonlinear_optimizer import check_convergence, huber
 from mast3r_slam.config import config
 from mast3r_slam.vggt_utils import (
     vggt_match_asymmetric, 
-    closed_form_sim3, 
-    match_sim3_scale,
     get_extri_intri_from_pose
 )
 
 import sys
 import os.path as path
-HERE_PATH = path.normpath(path.dirname(__file__))
-VGGT_REPO_PATH = path.normpath(path.join(HERE_PATH, '../thirdparty/vggt'))
-VGGT_LIB_PATH = path.join(VGGT_REPO_PATH, 'vggt')
-if path.isdir(VGGT_LIB_PATH):
-    sys.path.insert(0, VGGT_REPO_PATH)
-else:
-    raise ImportError(f"vggt is not initialized, could not find: {VGGT_LIB_PATH}.\n ")
-
-from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
 
 class FrameTracker:
@@ -52,7 +41,7 @@ class FrameTracker:
         T_CfCk ,K = get_extri_intri_from_pose(P, img_size)
         # extrinsics, intrinsics = pose_encoding_to_extri_intri(P, img_size)
 
-        Kf = K[0]
+        Kf, Kk = K[0], K[1]
 
         self.idx_f2k = idx_f2k.clone()
 
@@ -62,12 +51,7 @@ class FrameTracker:
         idx_f2k = idx_f2k[0]
 
         use_calib = config["use_calib"]
-
-        if use_calib:
-            K = self.keyframes.get_intrinsics()
-        else:
-            K = None
-
+ 
         Xf, Xk, T_WCk, Cf, Ck, meas_k, valid_meas_k = self.get_points_poses(
             frame, keyframe, idx_f2k, img_size, use_calib, K
         )
@@ -104,13 +88,10 @@ class FrameTracker:
                 valid_opt,
                 meas_k,
                 valid_meas_k,
-                K,
+                Kk,
                 img_size,
             )
 
-        T_WCk_last = self.keyframes[0].T_WC
-        T_CkCf = match_sim3_scale(T_CkCf, T_WCk_last)
-        T_WCf = match_sim3_scale(T_WCf, T_WCk_last)
         frame.T_WC = T_WCf
         Xkk = T_CkCf.act(Xfk)
         keyframe.update_pointmap(Xkk, Cfk)
@@ -177,12 +158,11 @@ class FrameTracker:
         meas_k = None
         valid_meas_k = None
 
-        # Kk = K[0, :]
-        # Kf = K[1, :]
-
         if use_calib:
-            Xf = constrain_points_to_ray(img_size, Xf[None], K).squeeze(0)
-            Xk = constrain_points_to_ray(img_size, Xk[None], K).squeeze(0)
+            Kk = K[0, :]
+            Kf = K[1, :]
+            Xf = constrain_points_to_ray(img_size, Xf[None], Kf).squeeze(0)
+            Xk = constrain_points_to_ray(img_size, Xk[None], Kk).squeeze(0)
 
             # Setup pixel coordinates
             uv_k = get_pixel_coords(1, img_size, device=Xf.device, dtype=Xf.dtype)

@@ -1,7 +1,7 @@
 use_calib: False
 use_stereo: False
 single_thread: False
-use_depth: False
+use_depth: True
 dataset:
   subsample: 5
   img_downsample: 1
@@ -16,7 +16,7 @@ matching:
   dilation_max: 5 # Right now starts from max and iteratively decreases until 1
 
 tracking:
-  min_match_frac: 0.01
+  min_match_frac: 0.2
   max_iters: 50
   C_conf: 0.0
   Q_conf: 1.5
@@ -31,7 +31,7 @@ tracking:
   sigma_point: 0.05
   pixel_border: -10 # Only in calib (negative means allow pixels outside image up to that distance)
   depth_eps: 1e-6 # Only in calib case
-  filtering_mode: weighted_pointmap # recent, first, best_score, weighted_pointmap, weighted_spherical, indep_conf
+  filtering_mode: weighted_spherical # recent, first, best_score, weighted_pointmap, weighted_spherical, indep_conf
   filtering_score: median # median, mean (only used for filtering_mode=best_score)
 
 local_opt:

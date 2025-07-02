@@ -251,20 +251,10 @@ if __name__ == "__main__":
         frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
 
         if mode == Mode.INIT:
-            if config['use_depth']:
-                D_init, C_init, P_init = vggt_inference_mono(model, frame)
-                _, K_init = get_extri_intri_from_pose(P_init, frame.img.shape[-2:])
-                X_init, C_init = depth_to_pointmap(D_init, C_init, K_init, if_init=True)
-                frame.update_pointmap(X_init, C_init)
-                keyframes.append(frame)
-                keyframes.set_intrinsics(K_init)
-            else:
-                X_init, C_init, P_init = vggt_inference_mono(model, frame)
-                frame.update_pointmap(X_init, C_init)
-                keyframes.append(frame)
-                if use_calib:
-                    _, K_init = get_extri_intri_from_pose(P_init, frame.img.shape[-2:])
-                    keyframes.set_intrinsics(K_init)
+            X_init, C_init, K_init = vggt_inference_mono(model, frame)
+            frame.update_pointmap(X_init, C_init)
+            keyframes.append(frame)
+            keyframes.set_intrinsics(K_init)
             states.queue_global_optimization(len(keyframes) - 1)
             states.set_mode(Mode.TRACKING)
             states.set_frame(frame)
@@ -275,21 +265,6 @@ if __name__ == "__main__":
             states.set_frame(frame)
 
         i += 1
-
-        # elif mode == Mode.RELOC:
-        #     X, C = mast3r_inference_mono(model, frame)
-        #     frame.update_pointmap(X, C)
-        #     states.set_frame(frame)
-        #     states.queue_reloc()
-        #     # In single threaded mode, make sure relocalization happen for every frame
-        #     while config["single_thread"]:
-        #         with states.lock:
-        #             if states.reloc_sem.value == 0:
-        #                 break
-        #         time.sleep(0.01)
-
-        # else:
-        #     raise Exception("Invalid mode")
 
         if add_new_kf:
             print(f"Add keyframe {i}")
