@@ -25,6 +25,13 @@ from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
 import numpy as np
 
+def downsample(X, C):
+    downsample = config["dataset"]["img_downsample"]
+    if downsample > 1:
+        X = X[..., ::downsample, ::downsample, :].contiguous()
+        C = C[..., ::downsample, ::downsample].contiguous()
+    return X, C
+
 @torch.inference_mode
 def vggt_inference_mono(model, frame):
     img = img_to_imgbschw(frame.img)
@@ -147,6 +154,7 @@ def vggt_symmmetric_inference(model, frame_i, frame_j):
 
     X = torch.stack(X, dim=1)  
     C = torch.stack(C, dim=1)  
+    X, C = downsample(X, C)
 
     return X, C
 

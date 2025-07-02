@@ -121,7 +121,6 @@ def run_backend(cfg, model, states, keyframes):
         # if len(lc_inds) > 0:
         #     print("Database retrieval", idx, ": ", lc_inds)
 
-        print('hello')
         kf_idx = set(kf_idx)  # Remove duplicates by using set
         kf_idx.discard(idx)  # Remove current kf idx if included
         kf_idx = list(kf_idx)  # convert to list
@@ -264,7 +263,7 @@ if __name__ == "__main__":
                 frame.update_pointmap(X_init, C_init)
                 keyframes.append(frame)
                 if use_calib:
-                    _, K_init = get_extri_intri_from_pose(P_init, frame.img.shape)
+                    _, K_init = get_extri_intri_from_pose(P_init, frame.img.shape[-2:])
                     keyframes.set_intrinsics(K_init)
             states.queue_global_optimization(len(keyframes) - 1)
             states.set_mode(Mode.TRACKING)
