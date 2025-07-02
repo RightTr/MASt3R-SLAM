@@ -10,9 +10,7 @@ else:
 
 import torch
 import torch.nn as nn
-from huggingface_hub import PyTorchModelHubMixin
 from vggt.models.vggt import VGGT
-from torchvision import transforms as TF
 import einops
 import lietorch
 from scipy.spatial.transform import Rotation as R_scipy
@@ -25,12 +23,6 @@ from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
 import numpy as np
 
-def downsample(X, C):
-    downsample = config["dataset"]["img_downsample"]
-    if downsample > 1:
-        X = X[..., ::downsample, ::downsample, :].contiguous()
-        C = C[..., ::downsample, ::downsample].contiguous()
-    return X, C
 
 @torch.inference_mode
 def vggt_inference_mono(model, frame):
@@ -44,7 +36,7 @@ def vggt_inference_mono(model, frame):
         D, C = model.depth_head(
                     aggregated_tokens_list, images=img, patch_start_idx=patch_start_idx
                 )
-        Dii = D[:, 0]
+        Dii = D[:, 0] 
         Cii = C[:, 0]
         return Dii, Cii, P
     else:
@@ -74,20 +66,20 @@ def vggt_asymmetric_inference(model, frame_i, frame_j):
         D, C = model.depth_head(
                     aggregated_tokens_list, images=imgs, patch_start_idx=patch_start_idx
                 )
-        Dii = D[:, 0]
-        Dij = D[:, 1]
-        Cii = C[:, 0]
-        Cij = C[:, 1]
+        Dii = D[:, 0] # (b, h, w, 1)
+        Dij = D[:, 1] # (b, h, w, 1)
+        Cii = C[:, 0] # (b, h, w)
+        Cij = C[:, 1] # (b, h, w)
         return P, Dii, Dij, Cii, Cij
     
     else:
         X, C = model.point_head(
                     aggregated_tokens_list, imgs, patch_start_idx=patch_start_idx
                 )
-        Xii = X[:, 0]
-        Xij = X[:, 1]
-        Cii = C[:, 0]
-        Cij = C[:, 1]
+        Xii = X[:, 0] # (b, h, w, c)
+        Xij = X[:, 1] # (b, h, w, c)
+        Cii = C[:, 0] # (b, h, w)
+        Cij = C[:, 1] # (b, h, w)
         return P, Xii, Xij, Cii, Cij
 
 def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
@@ -96,8 +88,7 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
         img_size = frame_i.img.shape[-2:]
         Tij, K = get_extri_intri_from_pose(P, img_size)
         Tji = Tij.inv()
-        print(Tij.shape)
-        Ki, Kj = K[0], K[1]
+        Ki, Kj = K[0], K[1] # ()
         Xii, Cii = depth_to_pointmap(Dii, Cii, Ki)
         Xjj, Cij = depth_to_pointmap(Djj, Cjj, Kj)
 
@@ -111,7 +102,6 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
 
     else:
         P, Xii, Xij, Cii, Cij = vggt_asymmetric_inference(model, frame_i, frame_j)
-
         idx_i2j, valid_match_j = matching.mymatch_iterative_proj(
             Xii, Xij, idx_i_to_j_init=idx_i2j_init
             )
@@ -134,7 +124,14 @@ def vggt_symmmetric_inference(model, frame_i, frame_j):
         imgs_ij = torch.cat([img_i, img_j], dim=1)
         imgs_ji = torch.cat([img_j, img_i], dim=1)
         if config['use_depth']:
-            aggregated_tokens_list, patch_start_idx = model.aggregator(imgs_ij)
+            aggregated_tokens_list_ij, patch_start_idx_ij = model.aggregator(imgs_ij)
+            aggregated_tokens_list_ji, patch_start_idx_ji = model.aggregator(imgs_ji)
+            Diijj, Ciijj = model.depth_head(
+                        aggregated_tokens_list_ij, imgs_ij, patch_start_idx=patch_start_idx_ij
+                    )
+            Djjii, Cjjii = model.depth_head(
+                    aggregated_tokens_list_ji, imgs_ji, patch_start_idx=patch_start_idx_ji
+                )
 
 
         else:
@@ -149,12 +146,11 @@ def vggt_symmmetric_inference(model, frame_i, frame_j):
             Xii, Xij, Xjj, Xji = Xiijj[0, 0], Xiijj[0, 1], Xjjii[0, 0], Xjjii[0, 1] # (h, w, c)
             Cii, Cij, Cjj, Cji = Ciijj[0, 0], Ciijj[0, 1], Cjjii[0, 0], Cjjii[0, 1] # (h, w)
 
-        X.append(torch.stack([Xii, Xji, Xjj, Xij], dim=0))
-        C.append(torch.stack([Cii, Cji, Cjj, Cij], dim=0))
+        X.append(torch.stack([Xii, Xij, Xjj, Xji], dim=0))
+        C.append(torch.stack([Cii, Cij, Cjj, Cji], dim=0))
 
-    X = torch.stack(X, dim=1)  
-    C = torch.stack(C, dim=1)  
-    X, C = downsample(X, C)
+    X = torch.stack(X, dim=1)
+    C = torch.stack(C, dim=1)
 
     return X, C
 
@@ -168,11 +164,11 @@ def vggt_match_symmetric(model, frame_i, frame_j, idx_i2j_init=None):
 
         b = X.shape[1]
 
-        Xii, Xji, Xjj, Xij = X[0], X[1], X[2], X[3]
-        Cii, Cji, Cjj, Cij = C[0], C[1], C[2], C[3]
+        Xii, Xij, Xjj, Xji = X[0], X[1], X[2], X[3]
+        Cii, Cij, Cjj, Cji = C[0], C[1], C[2], C[3]
      
         X11 = torch.cat([Xii, Xjj], dim=0)
-        X21 = torch.cat([Xji, Xij], dim=0)
+        X21 = torch.cat([Xij, Xji], dim=0)
 
         idx_1_to_2, valid_match_2 = matching.mymatch_iterative_proj(
             X11, X21
