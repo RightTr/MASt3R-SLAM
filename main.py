@@ -22,7 +22,7 @@ from mast3r_slam.multiprocess_utils import new_queue, try_get_msg
 from mast3r_slam.tracker import FrameTracker
 from mast3r_slam.visualization import WindowMsg, run_visualization
 import torch.multiprocessing as mp
-
+from mast3r_slam.retrieval_database import FaissRetrievalDatabase
 
 def relocalization(frame, keyframes, factor_graph, retrieval_database):
     # we are adding and then removing from the keyframe, so we need to be careful.
@@ -75,7 +75,7 @@ def run_backend(cfg, model, states, keyframes):
 
     device = keyframes.device
     factor_graph = FactorGraph(model, keyframes, device)
-    # retrieval_database = load_retriever(model)
+    retrieval_database = FaissRetrievalDatabase(dim=256)
 
     mode = states.get_mode()
     while mode is not Mode.TERMINATED:
@@ -105,18 +105,19 @@ def run_backend(cfg, model, states, keyframes):
         for j in range(min(n_consec, idx)):
             kf_idx.append(idx - 1 - j)
         frame = keyframes[idx]
-        # retrieval_inds = retrieval_database.update(
-        #     frame,
-        #     add_after_query=True,
-        #     k=config["retrieval"]["k"],
-        #     min_thresh=config["retrieval"]["min_thresh"],
-        # )
-        # kf_idx += retrieval_inds
+        retrieval_inds = retrieval_database.update(
+            frame,
+            k=config["retrieval"]["k"],
+            max_thresh=config["retrieval"]["max_thresh"],
+            add_after_query=True
+        )
+        print(retrieval_inds)
+        kf_idx += retrieval_inds
 
-        # lc_inds = set(retrieval_inds)
-        # lc_inds.discard(idx - 1)
-        # if len(lc_inds) > 0:
-        #     print("Database retrieval", idx, ": ", lc_inds)
+        lc_inds = set(retrieval_inds)
+        lc_inds.discard(idx - 1)
+        if len(lc_inds) > 0:
+            print("Database retrieval", idx, ": ", lc_inds)
 
         kf_idx = set(kf_idx)  # Remove duplicates by using set
         kf_idx.discard(idx)  # Remove current kf idx if included
@@ -252,6 +253,7 @@ if __name__ == "__main__":
         if mode == Mode.INIT:
             X_init, C_init, K_init = vggt_inference_mono(vggt, frame)
             Desc_init = salad_get_descriptor(salad, frame)
+            frame.token = Desc_init
             frame.update_pointmap(X_init, C_init)
             keyframes.append(frame)
             keyframes.set_intrinsics(K_init)
@@ -262,6 +264,8 @@ if __name__ == "__main__":
 
         if mode == Mode.TRACKING:
             add_new_kf, match_info, try_reloc, Kf = tracker.track(frame)
+            Desc_init = salad_get_descriptor(salad, frame)
+            frame.token = Desc_init
             states.set_frame(frame)
 
         i += 1

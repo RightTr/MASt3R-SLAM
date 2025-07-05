@@ -9,7 +9,7 @@ import yaml
 import glob
 import os
 
-from mast3r_slam.vggt_utils import resize_img
+from mast3r_slam.model_utils import resize_img
 from mast3r_slam.config import config
 from scipy.spatial.transform import Rotation, Slerp
 

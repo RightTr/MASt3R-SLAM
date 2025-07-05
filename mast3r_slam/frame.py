@@ -24,8 +24,7 @@ class Frame:
     T_WC: lietorch.Sim3 = lietorch.Sim3.Identity(1)
     X_canon: Optional[torch.Tensor] = None
     C: Optional[torch.Tensor] = None
-    feat: Optional[torch.Tensor] = None
-    pos: Optional[torch.Tensor] = None
+    token: Optional[torch.Tensor] = None
     N: int = 0
     N_updates: int = 0
     K: Optional[torch.Tensor] = None
@@ -157,8 +156,7 @@ class SharedStates:
         self.T_WC = lietorch.Sim3.Identity(1, device=device, dtype=dtype).data.share_memory_()
         self.X = torch.zeros(h * w, 3, device=device, dtype=dtype).share_memory_()
         self.C = torch.zeros(h * w, 1, device=device, dtype=dtype).share_memory_()
-        self.feat = torch.zeros(1, self.num_patches, self.feat_dim, device=device, dtype=dtype).share_memory_()
-        self.pos = torch.zeros(1, self.num_patches, 2, device=device, dtype=torch.long).share_memory_()
+        self.token = torch.zeros(256, device=device, dtype=dtype).share_memory_()
         # fmt: on
 
     def set_frame(self, frame):
@@ -171,8 +169,7 @@ class SharedStates:
             self.T_WC[:] = frame.T_WC.data
             self.X[:] = frame.X_canon
             self.C[:] = frame.C
-            # self.feat[:] = frame.feat
-            # self.pos[:] = frame.pos
+            self.token[:] = frame.token
 
     def get_frame(self):
         with self.lock:
@@ -186,8 +183,6 @@ class SharedStates:
             )
             frame.X_canon = self.X
             frame.C = self.C
-            frame.feat = self.feat
-            frame.pos = self.pos
             return frame
 
     def queue_global_optimization(self, idx):
@@ -249,8 +244,7 @@ class SharedKeyframes:
         self.C = torch.zeros(buffer, h * w, 1, device=device, dtype=dtype).share_memory_()
         self.N = torch.zeros(buffer, device=device, dtype=torch.int).share_memory_()
         self.N_updates = torch.zeros(buffer, device=device, dtype=torch.int).share_memory_()
-        # self.feat = torch.zeros(buffer, 1, self.num_patches, self.feat_dim, device=device, dtype=dtype).share_memory_()
-        # self.pos = torch.zeros(buffer, 1, self.num_patches, 2, device=device, dtype=torch.long).share_memory_()
+        self.token = torch.zeros(buffer, 256, dtype=dtype).share_memory_()
         self.is_dirty = torch.zeros(buffer, 1, device=device, dtype=torch.bool).share_memory_()
         self.K = torch.zeros(buffer, 3, 3, device=device, dtype=dtype).share_memory_()
         # fmt: on
@@ -268,8 +262,7 @@ class SharedKeyframes:
             )
             kf.X_canon = self.X[idx]
             kf.C = self.C[idx]
-            # kf.feat = self.feat[idx]
-            # kf.pos = self.pos[idx]
+            kf.token = self.token[idx]
             kf.N = int(self.N[idx])
             kf.N_updates = int(self.N_updates[idx])
             if config["use_calib"]:
@@ -289,8 +282,7 @@ class SharedKeyframes:
             self.T_WC[idx] = value.T_WC.data
             self.X[idx] = value.X_canon
             self.C[idx] = value.C
-            # self.feat[idx] = value.feat
-            # self.pos[idx] = value.pos
+            self.token[idx] = value.token
             self.N[idx] = value.N
             self.N_updates[idx] = value.N_updates
             self.is_dirty[idx] = True

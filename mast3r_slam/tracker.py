@@ -9,7 +9,7 @@ from mast3r_slam.geometry import (
 )
 from mast3r_slam.nonlinear_optimizer import check_convergence, huber
 from mast3r_slam.config import config
-from mast3r_slam.vggt_utils import (
+from mast3r_slam.model_utils import (
     vggt_match_asymmetric, 
     get_extri_intri_from_pose
 )

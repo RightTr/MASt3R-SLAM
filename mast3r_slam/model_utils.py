@@ -50,8 +50,13 @@ def load_salad(path=None, device="cuda:0"):
             'token_dim': 256,
         },
     )
+    if path is not None:
+        state_dict = torch.load(path, map_location=device)
+    else:
+        _URL = "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_pretrain.pth"
+        state_dict = torch.hub.load_state_dict_from_url(_URL, map_location=device)
 
-    model.load_state_dict(torch.load(path))
+    model.load_state_dict(state_dict, strict=False)
     model = model.eval()
     model = model.to(device)
     return model
@@ -59,9 +64,9 @@ def load_salad(path=None, device="cuda:0"):
 @torch.inference_mode
 def salad_get_descriptor(model, frame, device= "cuda:0"):
     with torch.autocast(device_type='cuda', dtype=torch.float16):
-            img = frame.img
+            img = frame.img.unsqueeze(0)
             output = model(img.to(device))
-    return output
+    return output[:, -256:].squeeze(0) # (256)
 
 @torch.inference_mode
 def vggt_inference_mono(model, frame):

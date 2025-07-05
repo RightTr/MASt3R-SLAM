@@ -53,7 +53,7 @@ local_opt:
 
 retrieval:
   k: 5
-  min_thresh: 5e-3
+  max_thresh: 5e-4
 
 reloc:
   min_match_frac: 0.3
