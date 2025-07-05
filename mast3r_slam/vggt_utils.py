@@ -86,7 +86,7 @@ def vggt_match_asymmetric(model, frame_i, frame_j, idx_i2j_init=None):
         Xii = depth_to_pointmap(Dii, Ki)
         Xjj = depth_to_pointmap(Djj, Kj)
         Cij = Cjj
-        Xij = X_tf(Xjj, Tji)
+        Xij = X_tf(Xjj, Tji) # Convert the pointmap from coordinate frame j to frame i
         idx_i2j, valid_match_j = matching.mymatch_iterative_proj(
             Xii, Xij, idx_i_to_j_init=idx_i2j_init
         )
@@ -324,11 +324,6 @@ def depth_to_pointmap(D, K, device='cuda:0'):
     K_inv = torch.inverse(K).view(1, 1, 1, 3, 3)
     K_inv = K_inv.expand(b, h, w, 3, 3)
     X = torch.matmul(K_inv, pix) * D.unsqueeze(-1)
-    # if if_init:
-    #     X = einops.rearrange(X[0, :].squeeze(-1), "h w c -> (h w) c")
-    #     C = einops.rearrange(C[0, :], "h w -> (h w) 1")
-    #     return X, C
-    # else:
     return X.squeeze(-1)
     
 def img_to_imgbschw(img):

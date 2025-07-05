@@ -39,7 +39,6 @@ class FrameTracker:
         
         img_size = frame.img.shape[-2:]
         T_CfCk ,K = get_extri_intri_from_pose(P, img_size)
-        # extrinsics, intrinsics = pose_encoding_to_extri_intri(P, img_size)
 
         Kf, Kk = K[0], K[1]
 
@@ -58,7 +57,6 @@ class FrameTracker:
 
         Qk = torch.ones_like(valid_match_k) # TODO: Info matrix
 
-        # T_CfCk = closed_form_sim3(extrinsics[:, 1]) 
         T_CkCf = T_CfCk.inv()
         T_WCf = T_WCk * T_CkCf
 
@@ -96,7 +94,6 @@ class FrameTracker:
         Xkk = T_CkCf.act(Xfk)
         keyframe.update_pointmap(Xkk, Cfk)
 
-        print(T_WCf.data)
         self.keyframes[len(self.keyframes) - 1] = keyframe
 
         n_valid = valid_kf.sum()

@@ -1,7 +1,7 @@
 use_calib: False
 use_stereo: False
 single_thread: False
-use_depth: True
+use_depth: False # Use the depthmap to generate the input pointmap.
 dataset:
   subsample: 5
   img_downsample: 1
@@ -11,12 +11,12 @@ matching:
   max_iter: 10
   lambda_init: 1e-8
   convergence_thresh: 1e-6
-  dist_thresh: 1e-1 # distance in 3D space
+  dist_thresh: 1e-2 # distance in 3D space
   radius: 3
   dilation_max: 5 # Right now starts from max and iteratively decreases until 1
 
 tracking:
-  min_match_frac: 0.2
+  min_match_frac: 0.05
   max_iters: 50
   C_conf: 0.0
   Q_conf: 1.5

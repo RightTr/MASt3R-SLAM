@@ -104,7 +104,7 @@ def run_backend(cfg, model, states, keyframes):
         # Graph Construction
         kf_idx = []
         # k to previous consecutive keyframes
-        n_consec = 1
+        n_consec = 3
         for j in range(min(n_consec, idx)):
             kf_idx.append(idx - 1 - j)
         frame = keyframes[idx]
@@ -219,6 +219,8 @@ if __name__ == "__main__":
     backend = mp.Process(target=run_backend, args=(config, model, states, keyframes))
     backend.start()
 
+    fps_timer = time.time()
+
     i = 0
 
     while True:
@@ -278,11 +280,10 @@ if __name__ == "__main__":
         #             if len(states.global_optimizer_tasks) == 0:
         #                 break
         #         time.sleep(0.01)
-        # # log time
-        # if i % 30 == 0:
-        #     FPS = i / (time.time() - fps_timer)
-        #     print(f"FPS: {FPS}")
-        # i += 1
+        # log time
+        if i % 30 == 0:
+            FPS = i / (time.time() - fps_timer)
+            print(f"FPS: {FPS}")
 
     # if dataset.save_results:
     #     save_dir, seq_name = eval.prepare_savedir(args, dataset)
