@@ -2,15 +2,11 @@ import sys
 import os.path as path
 HERE_PATH = path.normpath(path.dirname(__file__))
 VGGT_REPO_PATH = path.normpath(path.join(HERE_PATH, '../thirdparty/vggt'))
-VGGT_LIB_PATH = path.join(VGGT_REPO_PATH, 'vggt')
-if path.isdir(VGGT_LIB_PATH):
-    sys.path.insert(0, VGGT_REPO_PATH)
-else:
-    raise ImportError(f"vggt is not initialized, could not find: {VGGT_LIB_PATH}.\n ")
+SALAD_REPO_PATH = path.normpath(path.join(HERE_PATH, '../thirdparty/salad'))
+sys.path.insert(0, VGGT_REPO_PATH)
+sys.path.insert(0, SALAD_REPO_PATH)
 
 import torch
-import torch.nn as nn
-from vggt.models.vggt import VGGT
 import einops
 import lietorch
 from scipy.spatial.transform import Rotation as R_scipy
@@ -19,10 +15,53 @@ from PIL import Image
 from PIL import ImageOps
 from mast3r_slam.config import config
 
+from vggt.models.vggt import VGGT
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
+from vpr_model import VPRModel
 
 import numpy as np
 
+def load_vggt(path=None, device="cuda:0"):
+    model = VGGT()
+    if path is not None:
+        state_dict = torch.load(path, map_location=device)
+    else:
+        _URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
+        state_dict = torch.hub.load_state_dict_from_url(_URL, map_location=device)
+
+    model.load_state_dict(state_dict, strict=False)
+    model.eval()
+    model = model.to(device)
+    return model
+
+def load_salad(path=None, device="cuda:0"):
+    model = VPRModel(
+        backbone_arch='dinov2_vitb14',
+        backbone_config={
+            'num_trainable_blocks': 4,
+            'return_token': True,
+            'norm_layer': True,
+        },
+        agg_arch='SALAD',
+        agg_config={
+            'num_channels': 768,
+            'num_clusters': 64,
+            'cluster_dim': 128,
+            'token_dim': 256,
+        },
+    )
+
+    model.load_state_dict(torch.load(path))
+    model = model.eval()
+    model = model.to(device)
+    return model
+
+@torch.inference_mode
+def salad_get_descriptor(model, frame, device= "cuda:0"):
+    with torch.autocast(device_type='cuda', dtype=torch.float16):
+            img = frame.img
+            output = model(img.to(device))
+    return output
 
 @torch.inference_mode
 def vggt_inference_mono(model, frame):
@@ -227,19 +266,6 @@ def closed_form_sim3(se3, scale = 1.0, R=None, t=None):
     scale = torch.full((se3.shape[0], 1), scale, dtype=se3.dtype, device=se3.device)
 
     return lietorch.Sim3(torch.cat([t, quats, scale], dim=-1))
-
-def load_vggt(path=None, device="cuda"):
-    model = VGGT()
-    if path is not None:
-        state_dict = torch.load(path, map_location=device)
-    else:
-        _URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
-        state_dict = torch.hub.load_state_dict_from_url(_URL, map_location=device)
-
-    model.load_state_dict(state_dict, strict=False)
-    model.eval()
-    model = model.to(device)
-    return model
 
 def resize_img(img, return_transformation=False, mode="crop"):
     if mode not in ["crop", "pad"]:

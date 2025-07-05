@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Optional
 import lietorch
 import torch
-from mast3r_slam.vggt_utils import resize_img
+from mast3r_slam.model_utils import resize_img
 from mast3r_slam.config import config
 
 
@@ -131,7 +131,7 @@ def create_framepair(i, img_left, img_right, T_WC, img_size=512, device="cuda:0"
     return FramePair(frame_left, frame_right)
 
 class SharedStates:
-    def __init__(self, manager, h, w, dtype=torch.float32, device="cuda"):
+    def __init__(self, manager, h, w, dtype=torch.float32, device="cuda:0"):
         self.h, self.w = h, w
         self.dtype = dtype
         self.device = device
@@ -226,7 +226,7 @@ class SharedStates:
 
 
 class SharedKeyframes:
-    def __init__(self, manager, h, w, buffer=512, dtype=torch.float32, device="cuda"):
+    def __init__(self, manager, h, w, buffer=512, dtype=torch.float32, device="cuda:0"):
         self.lock = manager.RLock()
         self.n_size = manager.Value("i", 0)
 

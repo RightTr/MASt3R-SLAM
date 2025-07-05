@@ -5,12 +5,12 @@ from mast3r_slam.frame import SharedKeyframes
 from mast3r_slam.geometry import (
     constrain_points_to_ray,
 )
-from mast3r_slam.vggt_utils import vggt_match_symmetric
+from mast3r_slam.model_utils import vggt_match_symmetric
 import mast3r_slam_backends
 
 
 class FactorGraph:
-    def __init__(self, model, frames: SharedKeyframes, K=None, device="cuda"):
+    def __init__(self, model, frames: SharedKeyframes, K=None, device="cuda:0"):
         self.model = model
         self.frames = frames
         self.device = device
@@ -29,12 +29,6 @@ class FactorGraph:
     def add_factors(self, ii, jj, min_match_frac, is_reloc=False):
         kf_ii = [self.frames[idx] for idx in ii]
         kf_jj = [self.frames[idx] for idx in jj]
-        # feat_i = torch.cat([kf_i.feat for kf_i in kf_ii])
-        # feat_j = torch.cat([kf_j.feat for kf_j in kf_jj])
-        # pos_i = torch.cat([kf_i.pos for kf_i in kf_ii])
-        # pos_j = torch.cat([kf_j.pos for kf_j in kf_jj])
-        # shape_i = [kf_i.img_true_shape for kf_i in kf_ii]
-        # shape_j = [kf_j.img_true_shape for kf_j in kf_jj]
 
         (
             idx_i2j,

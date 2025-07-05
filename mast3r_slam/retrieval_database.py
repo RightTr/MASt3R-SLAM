@@ -7,7 +7,7 @@ from asmk import io_helpers
 
 
 class RetrievalDatabase(Retriever):
-    def __init__(self, modelname, backbone=None, device="cuda"):
+    def __init__(self, modelname, backbone=None, device="cuda:0"):
         super().__init__(modelname, backbone, device)
 
         self.ivf_builder = self.asmk.create_ivf_builder()

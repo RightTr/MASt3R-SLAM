@@ -1,12 +1,9 @@
 import argparse
 import datetime
-import pathlib
-import sys
 import time
 import cv2
 import lietorch
 import torch
-import tqdm
 import yaml
 from mast3r_slam.global_opt import FactorGraph
 
@@ -15,11 +12,11 @@ from mast3r_slam.dataloader import Intrinsics, load_dataset
 import mast3r_slam.evaluate as eval
 from mast3r_slam.frame import Mode, SharedKeyframes, SharedStates, create_frame, Frame
 
-from mast3r_slam.vggt_utils import (
+from mast3r_slam.model_utils import (
     load_vggt,
     vggt_inference_mono,
-    depth_to_pointmap,
-    get_extri_intri_from_pose,
+    load_salad,
+    salad_get_descriptor,
     )
 from mast3r_slam.multiprocess_utils import new_queue, try_get_msg
 from mast3r_slam.tracker import FrameTracker
@@ -196,8 +193,8 @@ if __name__ == "__main__":
         viz.start()
 
 
-    model = load_vggt(device=device)  
-    model.share_memory()
+    vggt = load_vggt(device=device)  
+    salad = load_salad()
 
     has_calib = dataset.has_calib()
     use_calib = config["use_calib"]
@@ -213,10 +210,10 @@ if __name__ == "__main__":
     #     keyframes.set_intrinsics(K)
 
 
-    tracker = FrameTracker(model, keyframes, device)
+    tracker = FrameTracker(vggt, keyframes, device)
     last_msg = WindowMsg()
 
-    backend = mp.Process(target=run_backend, args=(config, model, states, keyframes))
+    backend = mp.Process(target=run_backend, args=(config, vggt, states, keyframes))
     backend.start()
 
     fps_timer = time.time()
@@ -253,7 +250,8 @@ if __name__ == "__main__":
         frame = create_frame(i, img, T_WC, img_size=dataset.img_size, device=device)
 
         if mode == Mode.INIT:
-            X_init, C_init, K_init = vggt_inference_mono(model, frame)
+            X_init, C_init, K_init = vggt_inference_mono(vggt, frame)
+            Desc_init = salad_get_descriptor(salad, frame)
             frame.update_pointmap(X_init, C_init)
             keyframes.append(frame)
             keyframes.set_intrinsics(K_init)

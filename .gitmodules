@@ -7,3 +7,6 @@
 [submodule "thirdparty/vggt"]
 	path = thirdparty/vggt
 	url = https://github.com/facebookresearch/vggt.git
+[submodule "thirdparty/salad"]
+	path = thirdparty/salad
+	url = https://github.com/serizba/salad.git
