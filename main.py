@@ -287,19 +287,19 @@ if __name__ == "__main__":
             FPS = i / (time.time() - fps_timer)
             print(f"FPS: {FPS}")
 
-    # if dataset.save_results:
-    #     save_dir, seq_name = eval.prepare_savedir(args, dataset)
-    #     eval.save_traj(save_dir, f"{seq_name}.txt", dataset.timestamps, keyframes)
-    #     eval.save_reconstruction(
-    #         save_dir,
-    #         f"{seq_name}.ply",
-    #         keyframes,
-    #         last_msg.C_conf_threshold,
-    #     )
-    #     eval.save_keyframes(
-    #         save_dir / "keyframes" / seq_name, dataset.timestamps, keyframes
-    #     )
-    #     eval.evaluate(save_dir, dataset.poses, keyframes)
+    if dataset.save_results:
+        save_dir, seq_name = eval.prepare_savedir(args, dataset)
+        eval.save_traj(save_dir, f"{seq_name}.txt", dataset.timestamps, keyframes)
+        eval.save_reconstruction(
+            save_dir,
+            f"{seq_name}.ply",
+            keyframes,
+            last_msg.C_conf_threshold,
+        )
+        eval.save_keyframes(
+            save_dir / "keyframes" / seq_name, dataset.timestamps, keyframes
+        )
+        eval.evaluate(save_dir, dataset.poses, keyframes)
 
     print("done")
     backend.join()
