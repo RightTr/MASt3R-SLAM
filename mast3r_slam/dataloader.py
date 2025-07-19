@@ -154,7 +154,7 @@ class VIVIDDataset(MonocularDataset):
     def __init__(self, dataset_path):
         super().__init__()
         self.dataset_path = pathlib.Path(dataset_path)
-        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "RGB/data/*.png")))
+        self.rgb_files = sorted(glob.glob(os.path.join(self.dataset_path, "Thermal_fs/data/*.png")))
         self.n_img = len(self.rgb_files)
         self.poses = self.load_poses(os.path.join(self.dataset_path, "gt_RGB.txt"))
         self.timestamps = [os.path.splitext(os.path.basename(f))[0] for f in self.rgb_files]

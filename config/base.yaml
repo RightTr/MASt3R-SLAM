@@ -18,7 +18,7 @@ matching:
 tracking:
   min_match_frac: 0.05
   max_iters: 50
-  C_conf: 0.0
+  C_conf: 0.2
   Q_conf: 0.1
   rel_error: 1e-3
   delta_norm: 1e-3

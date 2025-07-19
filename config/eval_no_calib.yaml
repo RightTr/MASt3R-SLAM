@@ -4,4 +4,4 @@ use_calib: False
 use_stereo: False
 single_thread: False
 dataset:
-  subsample: 2
+  subsample: 5

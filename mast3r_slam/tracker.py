@@ -57,8 +57,7 @@ class FrameTracker:
 
         Qk = torch.ones_like(valid_match_k) # TODO: Info matrix
 
-        T_CkCf = T_CfCk.inv()
-        T_WCf = T_WCk * T_CkCf
+        T_WCf = T_WCk * T_CfCk
 
         valid_Cf = Cf > self.cfg["C_conf"]
         valid_Ck = Ck > self.cfg["C_conf"]
@@ -68,16 +67,16 @@ class FrameTracker:
 
         match_frac = valid_opt.sum() / valid_opt.numel()
 
-        if match_frac < self.cfg["min_match_frac"]:
-            print(f"Skipped frame {frame.frame_id}")
-            return False, [], True
+        # if match_frac < self.cfg["min_match_frac"]:
+        #     print(f"Skipped frame {frame.frame_id}")
+        #     return False, [], True
 
         if not use_calib:
-            T_WCf, T_CkCf = self.opt_pose_ray_dist_sim3( 
+            T_WCf, T_CfCk = self.opt_pose_ray_dist_sim3( 
                 Xf, Xk, T_WCf, T_WCk, Qk, valid_opt
             )
         else:
-            T_WCf, T_CkCf = self.opt_pose_calib_sim3(
+            T_WCf, T_CfCk = self.opt_pose_calib_sim3(
                 Xf,
                 Xk,
                 T_WCf,
@@ -91,7 +90,7 @@ class FrameTracker:
             )
 
         frame.T_WC = T_WCf
-        Xkk = T_CkCf.act(Xfk)
+        Xkk = T_CfCk.act(Xfk)
         keyframe.update_pointmap(Xkk, Cfk)
 
         self.keyframes[len(self.keyframes) - 1] = keyframe
@@ -195,22 +194,22 @@ class FrameTracker:
         sqrt_info = torch.cat((sqrt_info_ray.repeat(1, 3), sqrt_info_dist), dim=1)
 
         # Solving for relative pose without scale!
-        T_CkCf = T_WCk.inv() * T_WCf
+        T_CfCk = T_WCk.inv() * T_WCf
 
         # Precalculate distance and ray for obs k
         rd_k = point_to_ray_dist(Xk, jacobian=False)
 
         old_cost = float("inf")
         for step in range(self.cfg["max_iters"]):
-            Xf_Ck, dXf_Ck_dT_CkCf = act_Sim3(T_CkCf, Xf, jacobian=True)
+            Xf_Ck, dXf_Ck_dT_CfCk = act_Sim3(T_CfCk, Xf, jacobian=True)
             rd_f_Ck, drd_f_Ck_dXf_Ck = point_to_ray_dist(Xf_Ck, jacobian=True)
             # r = z-h(x)
             r = rd_k - rd_f_Ck
             # Jacobian
-            J = -drd_f_Ck_dXf_Ck @ dXf_Ck_dT_CkCf
+            J = -drd_f_Ck_dXf_Ck @ dXf_Ck_dT_CfCk
 
             tau_ij_sim3, new_cost = self.solve(sqrt_info, r, J)
-            T_CkCf = T_CkCf.retr(tau_ij_sim3)
+            T_CfCk = T_CfCk.retr(tau_ij_sim3)
 
             if check_convergence(
                 step,
@@ -227,9 +226,9 @@ class FrameTracker:
                 print(f"max iters reached {last_error}")
 
         # Assign new pose based on relative pose
-        T_WCf = T_WCk * T_CkCf
+        T_WCf = T_WCk * T_CfCk
 
-        return T_WCf, T_CkCf
+        return T_WCf, T_CfCk
 
     def opt_pose_calib_sim3(
         self, Xf, Xk, T_WCf, T_WCk, Qk, valid, meas_k, valid_meas_k, K, img_size
@@ -240,11 +239,11 @@ class FrameTracker:
         sqrt_info = torch.cat((sqrt_info_pixel.repeat(1, 2), sqrt_info_depth), dim=1)
 
         # Solving for relative pose without scale!
-        T_CkCf = T_WCk.inv() * T_WCf
+        T_CfCk = T_WCk.inv() * T_WCf
 
         old_cost = float("inf")
         for step in range(self.cfg["max_iters"]):
-            Xf_Ck, dXf_Ck_dT_CkCf = act_Sim3(T_CkCf, Xf, jacobian=True)
+            Xf_Ck, dXf_Ck_dT_CfCk = act_Sim3(T_CfCk, Xf, jacobian=True)
             pzf_Ck, dpzf_Ck_dXf_Ck, valid_proj = project_calib(
                 Xf_Ck,
                 K,
@@ -259,10 +258,10 @@ class FrameTracker:
             # r = z-h(x)
             r = meas_k - pzf_Ck
             # Jacobian
-            J = -dpzf_Ck_dXf_Ck @ dXf_Ck_dT_CkCf
+            J = -dpzf_Ck_dXf_Ck @ dXf_Ck_dT_CfCk
 
             tau_ij_sim3, new_cost = self.solve(sqrt_info2, r, J)
-            T_CkCf = T_CkCf.retr(tau_ij_sim3)
+            T_CfCk = T_CfCk.retr(tau_ij_sim3)
 
             if check_convergence(
                 step,
@@ -279,6 +278,6 @@ class FrameTracker:
                 print(f"max iters reached {last_error}")
 
         # Assign new pose based on relative pose
-        T_WCf = T_WCk * T_CkCf
+        T_WCf = T_WCk * T_CfCk
 
-        return T_WCf, T_CkCf
+        return T_WCf, T_CfCk

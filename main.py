@@ -101,7 +101,7 @@ def run_backend(cfg, model, states, keyframes):
         # Graph Construction
         kf_idx = []
         # k to previous consecutive keyframes
-        n_consec = 3
+        n_consec = 2
         for j in range(min(n_consec, idx)):
             kf_idx.append(idx - 1 - j)
         frame = keyframes[idx]
@@ -214,8 +214,8 @@ if __name__ == "__main__":
     tracker = FrameTracker(vggt, keyframes, device)
     last_msg = WindowMsg()
 
-    backend = mp.Process(target=run_backend, args=(config, vggt, states, keyframes))
-    backend.start()
+    # backend = mp.Process(target=run_backend, args=(config, vggt, states, keyframes))
+    # backend.start()
 
     fps_timer = time.time()
 
@@ -277,11 +277,11 @@ if __name__ == "__main__":
                 keyframes.set_intrinsics(Kf)
             states.queue_global_optimization(len(keyframes) - 1)
             # In single threaded mode, wait for the backend to finish
-        #     while config["single_thread"]:
-        #         with states.lock:
-        #             if len(states.global_optimizer_tasks) == 0:
-        #                 break
-        #         time.sleep(0.01)
+            while config["single_thread"]:
+                with states.lock:
+                    if len(states.global_optimizer_tasks) == 0:
+                        break
+                time.sleep(0.01)
         # log time
         if i % 30 == 0:
             FPS = i / (time.time() - fps_timer)
@@ -302,6 +302,6 @@ if __name__ == "__main__":
         eval.evaluate(save_dir, dataset.poses, keyframes)
 
     print("done")
-    backend.join()
+    # backend.join()
     if not args.no_viz:
         viz.join()
