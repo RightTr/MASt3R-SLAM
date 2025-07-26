@@ -71,11 +71,12 @@ def relocalization(frame, keyframes, factor_graph, retrieval_database):
 
 
 def run_backend(cfg, model, states, keyframes):
+    # TODO: Why factor graph optimization is not working? Maybe the frontend is taking too long to release the lock?
     set_global_config(cfg)
 
     device = keyframes.device
     factor_graph = FactorGraph(model, keyframes, device)
-    retrieval_database = FaissRetrievalDatabase(dim=256)
+    # retrieval_database = FaissRetrievalDatabase(dim=256)
 
     mode = states.get_mode()
     while mode is not Mode.TERMINATED:
@@ -103,21 +104,21 @@ def run_backend(cfg, model, states, keyframes):
         # k to previous consecutive keyframes
         n_consec = 2
         for j in range(min(n_consec, idx)):
-            kf_idx.append(idx - 1 - j)
-        frame = keyframes[idx]
-        retrieval_inds = retrieval_database.update(
-            frame,
-            k=config["retrieval"]["k"],
-            max_thresh=config["retrieval"]["max_thresh"],
-            add_after_query=True
-        )
-        print(retrieval_inds)
-        kf_idx += retrieval_inds
+            kf_idx.append(idx - 1 - j) 
+        # frame = keyframes[idx]
+        # retrieval_inds = retrieval_database.update(
+        #     frame,
+        #     k=config["retrieval"]["k"],
+        #     max_thresh=config["retrieval"]["max_thresh"],
+        #     add_after_query=True
+        # )
+        # print(retrieval_inds)
+        # kf_idx += retrieval_inds
 
-        lc_inds = set(retrieval_inds)
-        lc_inds.discard(idx - 1)
-        if len(lc_inds) > 0:
-            print("Database retrieval", idx, ": ", lc_inds)
+        # lc_inds = set(retrieval_inds)
+        # lc_inds.discard(idx - 1)
+        # if len(lc_inds) > 0:
+        #     print("Database retrieval", idx, ": ", lc_inds)
 
         kf_idx = set(kf_idx)  # Remove duplicates by using set
         kf_idx.discard(idx)  # Remove current kf idx if included
@@ -126,7 +127,7 @@ def run_backend(cfg, model, states, keyframes):
         if kf_idx:
             factor_graph.add_factors(
                 kf_idx, frame_idx, config["local_opt"]["min_match_frac"]
-            )
+            ) # It actually adds the edges between keyframes
 
         with states.lock:
             states.edges_ii[:] = factor_graph.ii.cpu().tolist()

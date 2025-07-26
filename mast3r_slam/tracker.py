@@ -55,7 +55,7 @@ class FrameTracker:
             frame, keyframe, idx_f2k, img_size, use_calib, K
         )
 
-        Qk = torch.ones_like(valid_match_k) # TODO: Info matrix
+        Qk = torch.ones_like(valid_match_k)
 
         T_WCf = T_WCk * T_CfCk
 

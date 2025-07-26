@@ -96,7 +96,7 @@ class Lines(LineGeometry):
         start_xyzw = np.concatenate([start, thickness], axis=-1)
         end_xyzw = np.concatenate([end, thickness], axis=-1)
         line = np.concatenate([start_xyzw, end_xyzw], axis=1).reshape(-1, 4)
-        if isinstance(color, np.ndarray):  # TODO Bit hacky!
+        if isinstance(color, np.ndarray):
             colors = color.reshape(-1, 4).astype(np.float32)
         else:
             color = [1.0, 1.0, 1.0, 1.0] if color is None else color

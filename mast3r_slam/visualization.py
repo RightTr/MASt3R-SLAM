@@ -355,27 +355,27 @@ class Window(WindowEvents):
         vao.render(mode=moderngl.POINTS, vertices=w * h)
         vao.release()
 
-    def frame_X(self, frame): # TODO: Reconstruction update
-        # if config["use_calib"]:
-        #     Xs = frame.X_canon[None]
-        #     if self.dP_dz is None:
-        #         device = Xs.device
-        #         dtype = Xs.dtype
-        #         img_size = frame.img_shape.flatten()[:2]
-        #         K = frame.K
-        #         p = get_pixel_coords(
-        #             Xs.shape[0], img_size, device=device, dtype=dtype
-        #         ).view(*Xs.shape[:-1], 2)
-        #         tmp1 = (p[..., 0] - K[0, 2]) / K[0, 0]
-        #         tmp2 = (p[..., 1] - K[1, 2]) / K[1, 1]
-        #         self.dP_dz = torch.empty(
-        #             p.shape[:-1] + (3, 1), device=device, dtype=dtype
-        #         )
-        #         self.dP_dz[..., 0, 0] = tmp1
-        #         self.dP_dz[..., 1, 0] = tmp2
-        #         self.dP_dz[..., 2, 0] = 1.0
-        #         self.dP_dz = self.dP_dz[..., 0].cpu().numpy().astype(np.float32)
-        #     return (Xs[..., 2:3].cpu().numpy().astype(np.float32) * self.dP_dz)[0]
+    def frame_X(self, frame): # TODO: When in "use_dpeth" mode, it can not resconstruct the 3D scene
+        if config["use_calib"]:
+            Xs = frame.X_canon[None]
+            if self.dP_dz is None:
+                device = Xs.device
+                dtype = Xs.dtype
+                img_size = frame.img_shape.flatten()[:2]
+                K = frame.K
+                p = get_pixel_coords(
+                    Xs.shape[0], img_size, device=device, dtype=dtype
+                ).view(*Xs.shape[:-1], 2)
+                tmp1 = (p[..., 0] - K[0, 2]) / K[0, 0]
+                tmp2 = (p[..., 1] - K[1, 2]) / K[1, 1]
+                self.dP_dz = torch.empty(
+                    p.shape[:-1] + (3, 1), device=device, dtype=dtype
+                )
+                self.dP_dz[..., 0, 0] = tmp1
+                self.dP_dz[..., 1, 0] = tmp2
+                self.dP_dz[..., 2, 0] = 1.0
+                self.dP_dz = self.dP_dz[..., 0].cpu().numpy().astype(np.float32)
+            return (Xs[..., 2:3].cpu().numpy().astype(np.float32) * self.dP_dz)[0]
 
         return frame.X_canon.cpu().numpy().astype(np.float32)
 

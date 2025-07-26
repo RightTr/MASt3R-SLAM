@@ -113,7 +113,8 @@ def match_iterative_proj(X11, X21, D11, D21, idx_1_to_2_init=None):
 
     return idx_1_to_2, valid_proj2.unsqueeze(-1)
 
-def mymatch_iterative_proj(Xii, Xij, T_CiCj=None, idx_i_to_j_init=None):
+def mymatch_iterative_proj(Xii, Xij, T_CiCj=None, idx_i_to_j_init=None): 
+    # Refinement of matches is skipped due to the desc being in half resolution
     cfg = config["matching"]
     if Xij.ndim == 3:
         b, h, w, c = Xii.shape

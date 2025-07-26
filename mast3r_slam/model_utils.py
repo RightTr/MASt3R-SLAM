@@ -34,7 +34,7 @@ def load_vggt(path=None, device="cuda:0"):
     model = model.to(device)
     return model
 
-def load_salad(path=None, device="cuda:0"): # Salad description
+def load_salad(path=None, device="cuda:0"): # Load the Salad model to obtain the description
     model = VPRModel(
         backbone_arch='dinov2_vitb14',
         backbone_config={
@@ -71,7 +71,7 @@ def salad_get_descriptor(model, frame, device= "cuda:0"):
 @torch.inference_mode
 def vggt_inference_mono(model, frame):
     img = img_to_imgbschw(frame.img)
-    aggregated_tokens_list, patch_start_idx = model.aggregator(img)
+    aggregated_tokens_list, patch_start_idx = model.aggregator(img) # It takes 0.2s to aggregate the tokens
 
     P = model.camera_head(aggregated_tokens_list)[-1]
     _, K = get_extri_intri_from_pose(P, frame.img.shape[-2:])
@@ -160,7 +160,7 @@ def vggt_symmmetric_inference(model, frame_ii, frame_jj):
         imgs_ij = torch.cat([img_i, img_j], dim=1)
         imgs_ji = torch.cat([img_j, img_i], dim=1)
 
-        if config['use_depth']:
+        if config['use_depth']: # TODO: It needs to be verified if it works well
             aggregated_tokens_list_ij, patch_start_idx_ij = model.aggregator(imgs_ij)
             aggregated_tokens_list_ji, patch_start_idx_ji = model.aggregator(imgs_ji)
             Diijj, Ciijj = model.depth_head(
@@ -210,7 +210,7 @@ def vggt_symmmetric_inference(model, frame_ii, frame_jj):
 
     return X, C
 
-def vggt_match_symmetric(model, frame_i, frame_j, idx_i2j_init=None):
+def vggt_match_symmetric(model, frame_i, frame_j):
     X, C = vggt_symmmetric_inference(model, frame_i, frame_j)
 
     b = X.shape[1]

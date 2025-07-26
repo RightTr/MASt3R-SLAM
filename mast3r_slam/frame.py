@@ -106,7 +106,7 @@ class Frame:
     def get_average_conf(self):
         return self.C / self.N if self.C is not None else None
 
-@dataclasses.dataclass #TODO: FramePair
+@dataclasses.dataclass
 class FramePair:
     frame_left: Frame
     frame_right: Frame
@@ -116,7 +116,7 @@ def create_frame(i, img, T_WC, img_size=512, device="cuda:0"):
     rgb = img["img"].to(device=device) # (c, h, w)
     img_shape = torch.tensor(img["true_shape"], device=device)
     img_true_shape = img_shape.clone()
-    uimg = torch.from_numpy(img["unnormalized_img"]).to(device=device) / 255.0 # TODO: Why divided by 255?
+    uimg = torch.from_numpy(img["unnormalized_img"]).to(device=device) / 255.0 # TODO: It works well, but why it needs to be divided by 255?
     downsample = config["dataset"]["img_downsample"]
     if downsample > 1:
         uimg = uimg[::downsample, ::downsample]
