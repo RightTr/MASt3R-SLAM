@@ -34,7 +34,7 @@ def load_vggt(path=None, device="cuda:0"):
     model = model.to(device)
     return model
 
-def load_salad(path=None, device="cuda:0"):
+def load_salad(path=None, device="cuda:0"): # Salad description
     model = VPRModel(
         backbone_arch='dinov2_vitb14',
         backbone_config={
